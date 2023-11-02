@@ -21,3 +21,8 @@ graph TD;
 
 
 ```
+## Installation
+`fmt` library - version 8.0 - 9.0. The `CMakeLists.txt` in symforce has
+the `FetchContent` method implemented to download the right version. Make sure
+a higher version is not already installed in your system.
+
