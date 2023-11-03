@@ -14,5 +14,6 @@ include_directories(
     ./src/gen
     ${gtsam_INCLUDE_DIRS}
 )
+include_directories(${SYMFORCE_INCLUDE_DIR_SYM})
 add_executable(linear_regression ./src/linear_regression.cpp)
-target_link_libraries(linear_regression gtsam fmt::fmt)
+target_link_libraries(linear_regression gtsam fmt::fmt ${SYMFORCE_LIBRARIES})
