@@ -1,7 +1,13 @@
 FIND_LIBRARY(SYMFORCE_GEN_LIBRARY symforce_gen PATHS "/usr/local/lib")
 FIND_LIBRARY(SYMFORCE_OPT_LIBRARY symforce_opt PATHS "/usr/local/lib")
 FIND_LIBRARY(SYMFORCE_SLAM_LIBRARY symforce_slam PATHS "/usr/local/lib")
-set(symforce_INCLUDE_DIRS "/usr/local/include/symforce")
-set(symforce_LIBRARIES ${SYMFORCE_GEN_LIBRARY} ${SYMFORCE_OPT_LIBRARY}
+FIND_PATH(SYMFORCE_INCLUDE_DIR_SYM pose2.h PATHS "/usr/local/include/sym/")
+FIND_PATH(SYMFORCE_INCLUDE_DIR_OPT optimizer.h PATHS "/usr/local/include/symforce/opt")
+FIND_PATH(SYMFORCE_INCLUDE_DIR_SLAM imu_factor.h PATHS
+    "/usr/local/include/symforce/slam/imu_preintegration")
+SET(SYMFORCE_INCLUDE_DIRS ${SYMFORCE_INCLUDE_DIR_SYM}
+${SYMFORCE_INCLUDE_DIR_OPT} ${SYMFORCE_INCLUDE_DIR_SLAM})
+SET(SYMFORCE_LIBRARIES ${SYMFORCE_GEN_LIBRARY} ${SYMFORCE_OPT_LIBRARY}
     ${SYMFORCE_SLAM_LIBRARY})
-set
+message(STATUS "Symforce include : ${SYMFORCE_INCLUDE_DIRS}")
+message(STATUS "Symforce libraries : ${SYMFORCE_LIBRARIES}")
