@@ -8,23 +8,29 @@ find_package(GTSAM REQUIRED PATHS ${GTSAM_DIR})
 find_package(GTest REQUIRED)
 find_package(fmt REQUIRED)
 if(fmt_FOUND)
-    message(STATUS "Format library found ${fmt_INCLUDE_DIRS}")
+    message(STATUS "Format ${fmt_VERSION} Found")
 endif()
 # include generated code from symforce
 include_directories(
-    ./src/gen
+    ./include
     ${gtsam_INCLUDE_DIRS}
 )
 include_directories(${SYMFORCE_INCLUDE_DIR_SYM})
-add_executable(type_compatibility ./src/type_compatibility.cpp)
-target_link_libraries(type_compatibility gtsam fmt::fmt ${SYMFORCE_LIBRARIES})
-
 enable_testing()
-
-
 add_executable(
     type_compatibility_test
     ./tests/type_compatibility_test.cpp
+)
+add_executable(
+    regression
+    ./src/regression.cpp
+)
+
+target_link_libraries(
+    regression
+    GTest::gtest_main
+    gtsam
+    ${SYMFORCE_LIBRARIES}
 )
 
 target_link_libraries(

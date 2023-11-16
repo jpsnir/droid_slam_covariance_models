@@ -8,6 +8,9 @@
 #include <gtsam/base/Vector.h>
 #include<sym/pose2.h>
 #include<sym/rot2.h>
+#include "gen/cpp/symforce/sym/squared_error_factor.h"
+#include "ops/storage_ops.h"
+
 TEST(TypeCompatibilityTest, BasicUsage){
 
     sym::Rot2<float> rot(M_PI/6);
@@ -17,6 +20,10 @@ TEST(TypeCompatibilityTest, BasicUsage){
     Eigen::Vector2d v_g(0,0);
     gtsam::Matrix v_d(0,0);
     sym::Pose2<double> pose1 = {rot1, v_g};
+    Eigen::Matrix<float,1,1> res;
+    Eigen::Matrix<float,1,2> jacobian;
+    Eigen::Matrix<float,2,2> hessian;
+    sym::SquaredErrorFactor<float>(1, 2, 1, 2, &res, &jacobian, &hessian);
     SUCCEED();
 }
 
