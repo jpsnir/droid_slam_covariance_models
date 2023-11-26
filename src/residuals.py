@@ -159,3 +159,13 @@ if __name__ == "__main__":
     metadata = codegen_lin.generate_function(
         output_dir=folder
     )
+
+    codegen_lin = codegen.Codegen.function(
+        func=droid_slam_residual_single,
+        config=codegen.PythonConfig()
+    ).with_linearization(
+        which_args=["w_pose_i", "w_pose_j", "d_src"]
+    )
+    metadata = codegen_lin.generate_function(
+        output_dir="."
+    )
