@@ -68,7 +68,6 @@ def droid_slam_residual_single(
         w_pose_i: sf.Pose3,
         w_pose_j: sf.Pose3,
         K: sf.LinearCameraCal,
-        pixel_confidence: sf.V2,
         epsilon: sf.Scalar,
 ) -> sf.V1:
     '''
@@ -85,11 +84,7 @@ def droid_slam_residual_single(
         landmark_j = i_pose_j * landmark_i
     reprojected_lm_j, status = K.pixel_from_camera_point(landmark_j, epsilon)
     error = dst_img_coords - reprojected_lm_j
-    sigma = sf.Matrix.diag(pixel_confidence)
-    mahanalobnis_distance = (
-        error.transpose() * sigma.inv() * error
-    )
-    return mahanalobnis_distance
+    return error
 
 
 # We dont have a tensor in symforce
