@@ -177,11 +177,16 @@ def factor_graph_image_pair(
             # as it will be optimized as a variable.
 
             symbol_di = gtsam.symbol('d', ROWS * COLS * i + count_symbol)
+
             if not init_values.exists(symbol_di):
                 init_values.insert(symbol_di, depth[row, col].numpy())
             # define noise for each pixel from confidence map or weight
             # matrix
-            w = weights[:, row, col].numpy().reshape(2, 1)
+            di = depth[row, col]
+            if depth[row, col].numpy() < 0.25:
+                w = np.array([10e10, 10e10])
+            else:
+                w = 0.001 * weights[:, row, col].numpy().reshape(2, 1)
             pixel_noise_model = gtsam.noiseModel.Diagonal.Sigmas(1 / w)
             dst_img_coords = target_pt[:, row, col].numpy().reshape(2, 1)
             src_img_coords = np.array([row, col]).reshape(2, 1)
@@ -314,7 +319,7 @@ if __name__ == "__main__":
     b_list = []
     cov_list = []
     info_list = []
-    if flag:
+    if int(flag):
         print(f'Errors init values = {graph.error(init_values)}')
         lin_graph1 = graph.linearize(init_values)
         jac, b = lin_graph1.jacobian()
@@ -325,7 +330,7 @@ if __name__ == "__main__":
     info_list.append(info)
     cov_list.append(cov)
     flag = input("Linearize graph final values: 0-> No, 1-> yes")
-    if flag:
+    if int(flag):
         print(f'Errors final values = {graph.error(result)}')
         lin_graph2 = graph.linearize(result)
         jac, b = lin_graph2.jacobian()
