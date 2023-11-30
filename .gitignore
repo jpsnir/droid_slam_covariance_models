@@ -1,2 +1,6 @@
 build
 compile_commands.json
+log.txt
+*.dot
+__pycache__
+*.egg-info
