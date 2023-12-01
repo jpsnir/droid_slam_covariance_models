@@ -85,6 +85,43 @@ def test_Cal3_S2_camera_calibrate_method():
     assert (cam.calibrate(p_xy) == normalized_coords).all()
 
 
+def test_gtsam_Pose3_functions():
+    '''
+    Understand the behavior of methods from pose3 types.
+    world coordinate system (FRD)
+    x -> forward, y->left, z -> up
+    camera coordinate system
+    x -> right, y-> down, z->forward
+    '''
+    # define camera wrt camera0
+    R = gtsam.Rot3.RzRyRx(-np.pi / 2, 0, -np.pi / 2)
+    assert (isinstance(R, gtsam.Rot3))
+    T_wc = gtsam.Pose3(
+        r=R,
+        t=np.array([5, 0, 0])
+    )
+    l_c = gtsam.Point3(x=0, y=0, z=10)
+    print(f"T_wc = {T_wc.print()}")
+    # Point in world frame.
+    # l_w = T_wc * l_c
+    l_w = T_wc.transformFrom(l_c)
+    assert (isinstance(T_wc, gtsam.Pose3))
+    # Landmark is away from camera by 10 units in x axis
+    # camera origin is away from world origin by 5 units in xaxis
+    assert np.isclose(l_w[0], 15)
+
+    # compose and transformPoseFrom
+    delta_T = gtsam.Pose3(
+        r=gtsam.Rot3.Rz(0.1),
+        t=np.array([0, 0, .2])
+    )
+
+    T_w_c1 = T_wc.transformPoseFrom(delta_T)
+    print(f"transform pose from = {T_w_c1.print()}")
+    print(f"Compose = {T_wc.compose(delta_T)}")
+    assert T_w_c1.equals(T_wc.compose(delta_T), 0.001)
+
+
 def test_Cal3_S2_camera_uncalibrate_method():
     '''
     The output of uncalibrate method is tested.
@@ -157,7 +194,6 @@ def test_pinhole_perspective_camera_functions():
         pt_2d, flag = ph_camera.projectSafe(pt_3)
         assert (flag == False)
         print(f'camera projection {pt_3}, flag={flag} : {pt_2d}')
-    expected_2d_pt_list = []
     # Camera projection function is implementing the following
     # x = X/Z * fx + cx
     # y = Y/Z * fy + cy
@@ -172,6 +208,18 @@ def test_pinhole_perspective_camera_functions():
             [p[0] / p[2] * K.fx() + K.px(),
              p[1] / p[2] * K.fy() + K.py()])
         assert (expected_xy == ph_camera.project(p)).all()
+
+    # back project a 2D point.
+    depth = pt_3d_list[0][2]
+    backprj_pt = ph_camera.backproject(
+        ph_camera.project(pt_3d_list[0]), depth
+    )
+    assert isinstance(backprj_pt, np.ndarray)
+    assert (backprj_pt == pt_3d_list[0]).all()
+
+    # test projection with change in transformation
+    # ph_camera = gtsam.PinholePoseCal3_S2(
+    #        pose=gtsam.Pose3.identity()*gtsam.Pose3.
 
 
 def test_Cal3_S2_function_jacobians():
