@@ -1,0 +1,19 @@
+add_executable(
+    type_compatibility_test
+    ./type_compatibility_test.cpp
+)
+target_include_directories(type_compatibility_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/droid_cvm/include
+    ${gtsam_INCLUDE_DIRS}
+    ${SYMFORCE_INClUDE_DIR_SYM}
+)
+target_link_libraries(
+    type_compatibility_test
+    GTest::gtest_main
+    gtsam
+    ${SYMFORCE_LIBRARIES}
+)
+
+#include(GoogleTest)
+#gtest_discover_tests(type_compatibility_test)

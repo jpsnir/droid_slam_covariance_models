@@ -1,8 +1,9 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include "fg_reader.h"
-#include "fg_builder.h"
+#include "fg_parser/fg_reader.h"
+#include "fg_parser/fg_builder.h"
+#include<custom_factors/gen/cpp/symforce/sym/droid_slam_residual_single_factor.h>
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {

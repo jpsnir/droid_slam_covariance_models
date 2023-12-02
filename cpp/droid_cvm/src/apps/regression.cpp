@@ -1,6 +1,6 @@
 #include <iostream>
 #include <gtsam/3rdparty/Eigen/Eigen/Dense>
-#include <gen/cpp/symforce/sym/squared_error_factor.h>
+#include <custom_factors/gen/cpp/symforce/sym/squared_error_factor.h>
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/linear/GaussianFactor.h>
 #include <gtsam/linear/GaussianFactorGraph.h>

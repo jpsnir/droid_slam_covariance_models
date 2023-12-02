@@ -1,5 +1,4 @@
 #include <iostream>
-#include<gen/cpp/symforce/sym/droid_slam_residual_single_factor.h>
 #include<vector>
 
 namespace fg{

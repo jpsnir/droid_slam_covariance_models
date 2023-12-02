@@ -8,7 +8,7 @@
 #include <gtsam/base/Vector.h>
 #include<sym/pose2.h>
 #include<sym/rot2.h>
-#include "gen/cpp/symforce/sym/squared_error_factor.h"
+#include "custom_factors/gen/cpp/symforce/sym/squared_error_factor.h"
 
 TEST(TypeCompatibilityTest, BasicUsage){
 
