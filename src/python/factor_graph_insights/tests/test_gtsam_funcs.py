@@ -218,8 +218,23 @@ def test_pinhole_perspective_camera_functions():
     assert (backprj_pt == pt_3d_list[0]).all()
 
     # test projection with change in transformation
-    # ph_camera = gtsam.PinholePoseCal3_S2(
-    #        pose=gtsam.Pose3.identity()*gtsam.Pose3.
+    T_wc = gtsam.Pose3(
+        r=gtsam.Rot3.RzRyRx(-np.pi / 2, 0, -np.pi / 2),
+        t=np.array([5, 0, 0])
+    )
+    ph_camera_1 = ph_camera
+    ph_camera_2 = gtsam.PinholePoseCal3_S2(
+        pose=T_wc,
+        K=cam
+    )
+    backprj_pt_c = ph_camera_1.backproject(gtsam.Point2(x=10, y=10), 5)
+    backprj_pt_2 = ph_camera_2.backproject(gtsam.Point2(x=10, y=10), 5)
+    pt_3d_w = T_wc.transformFrom(backprj_pt_c)
+    # This shows that the back projected point from a camera is in the world
+    # frame.
+    print(f"Point in world frame = {pt_3d_w}")
+    print(f"back projected point directly from camera = {backprj_pt_2}")
+    assert (pt_3d_w == backprj_pt_2).all()
 
 
 def test_Cal3_S2_function_jacobians():
