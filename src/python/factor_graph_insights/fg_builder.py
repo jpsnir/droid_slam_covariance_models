@@ -7,6 +7,7 @@ datatype dependency relation between gtsam and sym module.
 @author : jagatpreet
 '''
 import os
+import sys
 import gtsam
 import sym
 import pickle
@@ -160,13 +161,28 @@ def factor_graph_image_pair(
     COLS = depth.size()[1]
     symbol_xi = gtsam.symbol('x', i)
     symbol_xj = gtsam.symbol('x', j)
+    if (isinstance(intrinsics, torch.Tensor)):
+        k_matrix = intrinsics.numpy()
+    else:
+        k_matrix = intrinsics
+    pose_i_gtsam = convert_to_gtsam_pose(pose_i.numpy())
+    pose_j_gtsam = convert_to_gtsam_pose(pose_j.numpy())
     if not init_values.exists(symbol_xi):
-        pose_i_gtsam = convert_to_gtsam_pose(pose_i.numpy())
         init_values.insert(symbol_xi, pose_i_gtsam)
     if not init_values.exists(symbol_xj):
-        pose_j_gtsam = convert_to_gtsam_pose(pose_j.numpy())
         init_values.insert(symbol_xj, pose_j_gtsam)
 
+    # define pinhole model
+    camera = gtsam.Cal3_S2(k_matrix[0], k_matrix[1], 0, k_matrix[2], k_matrix[3])
+    # perspective camera model
+    ph_camera_i = gtsam.PinholePoseCal3_S2(
+        pose=pose_i_gtsam,
+        K=camera,
+    )
+    ph_camera_j = gtsam.PinholePoseCal3_S2(
+        pose=pose_j_gtsam,
+        K=camera,
+    )
     graph = gtsam.NonlinearFactorGraph()
     # Poses are to be optimized.
     # X_i and X_j so they are assigned symbols.
@@ -182,12 +198,20 @@ def factor_graph_image_pair(
                 init_values.insert(symbol_di, depth[row, col].numpy())
             # define noise for each pixel from confidence map or weight
             # matrix
-            di = depth[row, col]
-            if depth[row, col].numpy() < 0.25:
-                w = np.array([10e10, 10e10])
+            xy_i = np.array([row, col])
+            depth_xy_i = depth[row, col].item()
+            pt3d_w = ph_camera_i.backproject(xy_i, depth_xy_i)
+            pt3d_j = pose_j_gtsam.inverse().transformTo(pt3d_w)
+            depth_j = pt3d_j[2]
+            print(f'depth of point in {j} camera - {depth_j} - {depth_j < 0.25}')
+            if depth_j < 0.25:
+                w = np.array([0, 0])
             else:
-                w = 0.001 * weights[:, row, col].numpy().reshape(2, 1)
-            pixel_noise_model = gtsam.noiseModel.Diagonal.Sigmas(1 / w)
+                w = 0.001 * weights[:, row, col].numpy().reshape(2)
+            pixel_noise_model = gtsam.noiseModel.Diagonal.Information(
+                np.diag(w)
+            )
+            pixel_noise_model.print()
             dst_img_coords = target_pt[:, row, col].numpy().reshape(2, 1)
             src_img_coords = np.array([row, col]).reshape(2, 1)
             # define factor for the pixel at (row, col)
@@ -207,7 +231,7 @@ def factor_graph_image_pair(
     return graph
 
 
-def build_factor_graph(fg_data: dict) -> gtsam.NonlinearFactorGraph:
+def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
     '''
     build factor graph from complete data
     '''
@@ -220,7 +244,8 @@ def build_factor_graph(fg_data: dict) -> gtsam.NonlinearFactorGraph:
     ii = graph_data['ii']
     jj = graph_data['jj']
     pair_unique_id = {}
-    n = 5  # ii.size()[0]
+    if n == 0:
+        n = ii.size()[0]
     unique_id = 0
     full_graph = gtsam.NonlinearFactorGraph()
     print(f'''Graph index - {graph_data['ii'].size()},
@@ -231,6 +256,8 @@ def build_factor_graph(fg_data: dict) -> gtsam.NonlinearFactorGraph:
               predicted - shape = {predicted.size()},
               ---------------------------
               depth - shape = {depth.size()},
+              -------------------------------
+              intrinics - shape = {K.size()}, {K},
         ''')
     for (index, (ix, jx)) in enumerate(zip(ii[:n], jj[:n])):
         key = (ix, jx)
@@ -258,7 +285,7 @@ def build_factor_graph(fg_data: dict) -> gtsam.NonlinearFactorGraph:
 
 
 if __name__ == "__main__":
-
+    N = 5
     fg_dir = Path(
         "/media/jagatpreet/D/datasets/uw_rig/samples"
     ).joinpath(
@@ -290,7 +317,7 @@ if __name__ == "__main__":
     print(f'Analyzing file : { fg_file}')
     fg_data = import_fg_from_pickle_file(fg_file)
     print_factor_graph_stats(fg_data)
-    graph = build_factor_graph(fg_data)
+    graph = build_factor_graph(fg_data, N)
     graph.push_back(
         gtsam.PriorFactorPose3(symbol_first_pose,
                                init_values.atPose3(symbol_first_pose),
@@ -303,17 +330,6 @@ if __name__ == "__main__":
     )
 
     print(f'Number of factors={graph.nrFactors()}')
-    number_of_iters = input(
-        'Enter integer number of iterations for optimization:')
-    print(f'Number of iterations {number_of_iters}')
-    time.sleep(2)
-    params = gtsam.LevenbergMarquardtParams()
-    params.setMaxIterations(int(number_of_iters))
-    print(f" LM params: {params}")
-    optimizer = gtsam.LevenbergMarquardtOptimizer(
-        graph, init_values, params)
-    result = optimizer.optimize()
-    print(f'Final result :\n {result}')
     flag = input("Linearize graph initial values: 0-> No, 1-> yes")
     jac_list = []
     b_list = []
@@ -329,6 +345,24 @@ if __name__ == "__main__":
     b_list.append(b)
     info_list.append(info)
     cov_list.append(cov)
+    jac_list.append(jac)
+    b_list.append(b)
+    info_list.append(info)
+    cov_list.append(cov)
+    marginals_init = gtsam.Marginals(graph, init_values)
+    sys.exit(0)
+    number_of_iters = input(
+        'Enter integer number of iterations for optimization:')
+    print(f'Number of iterations {number_of_iters}')
+    time.sleep(2)
+    params = gtsam.LevenbergMarquardtParams()
+    params.setMaxIterations(int(number_of_iters))
+    print(f" LM params: {params}")
+    optimizer = gtsam.LevenbergMarquardtOptimizer(
+        graph, init_values, params)
+    result = optimizer.optimize()
+    print(f'Final result :\n {result}')
+    marginals_new = gtsam.Marginals(graph, result)
     flag = input("Linearize graph final values: 0-> No, 1-> yes")
     if int(flag):
         print(f'Errors final values = {graph.error(result)}')
@@ -336,10 +370,3 @@ if __name__ == "__main__":
         jac, b = lin_graph2.jacobian()
         cov = np.linalg.inv(jac.transpose() @ jac)
         info = jac.transpose() @ jac
-    jac_list.append(jac)
-    b_list.append(b)
-    info_list.append(info)
-    cov_list.append(cov)
-    if (int(flag)):
-        marginals_init = gtsam.Marginals(graph, init_values)
-        marginals_new = gtsam.Marginals(graph, result)
