@@ -4,25 +4,26 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(./cmake_modules/FindSymForce.cmake)
 set(TORCH_DIR /home/jagatpreet/software/libtorch)
 set(GTSAM_DIR "/home/jagatpreet/software/gtsam/install_4_1")
-
 set(BUILD_TESTS ON)
 find_package(GTSAM REQUIRED PATHS ${GTSAM_DIR})
 find_package(GTest REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Torch REQUIRED PATHS ${TORCH_DIR})
-
+find_package(spdlog REQUIRED)
 if(fmt_FOUND)
     message(STATUS "Format ${fmt_VERSION} Found")
 endif()
 if(Torch_FOUND)
     message(STATUS "Torch ${Torch_VERSION} Found")
 endif()
-
-add_subdirectory(droid_cvm)
-# include generated code from symforce
-
+if(spdlog_FOUND)
+    message(STATUS "spdlog ${spdlog_VERSION} Found")
+endif()
 
 # TARGETS
+add_subdirectory(droid_cvm)
+
+# Tests
 if(${BUILD_TESTS})
     add_subdirectory(tests)
     enable_testing()
