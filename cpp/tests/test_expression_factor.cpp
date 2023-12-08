@@ -163,7 +163,7 @@ TEST(ExpressionUsage, ArithmeticTest) {
 }
 
 // Test predefined expressions in expressions.h
-// include that file.
+// include gtsam/nonlinear/expressions.h
 TEST(ExpressionUsage, InternalDefinitionTest){
     const Key k = Symbol(1);
     // Directly giving the key as a number in
