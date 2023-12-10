@@ -15,6 +15,7 @@ private:
   Point2 predicted_pixel_j_; // predicted measurement pixel in frame j
   Point2 pixel_i_;
   Cal3_S2 K_;
+  bool valid_;
 
 public:
   using Base::evaluateError;
@@ -43,15 +44,17 @@ public:
    */
   Vector evaluateError(const Pose3 &pose_i, const Pose3 &pose_j,
                        const double &depth_i,
-                       boost::optional<Matrix &> H_pose_i,
-                       boost::optional<Matrix &> H_pose_j,
-                       boost::optional<Matrix &> H_depth_i) const override;
+                       boost::optional<Matrix &> H_pose_i = boost::none,
+                       boost::optional<Matrix &> H_pose_j = boost::none,
+                       boost::optional<Matrix &> H_depth_i = boost::none) const override;
 
   //  gtsam::NonlinearFactor::shared_ptr clone() const override;
   inline const Point2 &measurementIn() const { return predicted_pixel_j_; }
   inline const Point2 &pixelInCam() const { return pixel_i_; }
   inline const Cal3_S2 &Calibration() const { return K_; }
-
+  inline void setValid(bool flag){
+      valid_ = flag;
+  }
   // TODO: serialization of factor
 };
 }; // namespace gtsam
