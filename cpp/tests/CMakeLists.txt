@@ -32,8 +32,11 @@ target_include_directories(test_liegroup_ops PRIVATE
 target_link_libraries(test_liegroup_ops GTest::gtest_main gtsam
     ${SYMFORCE_LIBRARIES} spdlog::spdlog GeographicLib::GeographicLib
 )
-add_executable(test_custom_factor ./test_custom_factor.cpp )
+add_executable(test_custom_factor ./test_custom_factor.cpp
+    ${PROJECT_SOURCE_DIR}/droid_cvm/src/libs/droid_DBA_factor.cpp )
+
 target_include_directories(test_custom_factor PRIVATE
+    ${PROJECT_SOURCE_DIR}/droid_cvm/include
     ${gtsam_INCLUDE_DIRS} ${SYMFORCE_INCLUDE_DIR_SYM} ${spdlog_INCLUDE_DIRS}
     ${fmt_INCLUDE_DIRS} )
 target_link_libraries(test_custom_factor GTest::gtest_main gtsam
