@@ -1,23 +1,18 @@
-add_executable(
-    regression
-    ./src/apps/regression.cpp
-)
-target_include_directories(
-    regression
-    PRIVATE
-    ./include
-    ${gtsam_INCLUDE_DIRS}
-    ${SYMFORCE_INCLUDE_DIR_SYM}
-)
-
+##################################################
+###################Custom factors##################
+add_library(
+    custom_droid_factors
+    SHARED
+    ./src/libs/droid_DBA_factor.cpp
+    )
+target_include_directories(custom_droid_factors PRIVATE ./include)
 target_link_libraries(
-    regression
-    GTest::gtest_main
+    custom_droid_factors
     gtsam
-    ${SYMFORCE_LIBRARIES}
 )
-
-
+###############################################
+############ GENERAL LIBRARIES#################
+# factor graph reader library
 add_library(
     fg_reader
     SHARED
@@ -42,6 +37,7 @@ target_link_libraries(
 )
 set_property(TARGET fg_reader PROPERTY CXX_STANDARD 17)
 
+# factor graph builder library
 add_library(
     fg_builder
     SHARED
@@ -62,6 +58,27 @@ target_include_directories(
 )
 target_link_libraries(
     fg_builder
+    gtsam
+    ${SYMFORCE_LIBRARIES}
+)
+#####################################################
+########################APPS#########################
+# regression example
+add_executable(
+    regression
+    ./src/apps/regression.cpp
+)
+target_include_directories(
+    regression
+    PRIVATE
+    ./include
+    ${gtsam_INCLUDE_DIRS}
+    ${SYMFORCE_INCLUDE_DIR_SYM}
+)
+
+target_link_libraries(
+    regression
+    GTest::gtest_main
     gtsam
     ${SYMFORCE_LIBRARIES}
 )
