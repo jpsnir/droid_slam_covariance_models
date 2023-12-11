@@ -12,9 +12,10 @@ target_link_libraries(
 )
 #############################################
 ############### Python Wrapper ##############
-add_library(droid_dba_factors_py ./wrap/droid_dba_factor_pybinder.cpp)
-target_link_libraries(droid_dba_factors_py droid_dba_factors_cpp)
-target_include_directories(droid_dba_factors_py PRIVATE ./include)
+pybind11_add_module(droid_dba_factors_py ./wrap/droid_dba_factor_pybinder.cpp)
+target_link_libraries(droid_dba_factors_py PRIVATE droid_dba_factors_cpp)
+target_include_directories(droid_dba_factors_py PRIVATE ./include
+    ${pybind11_INCLUDE_DIRS})
 ###############################################
 ############ GENERAL LIBRARIES#################
 # factor graph reader library
