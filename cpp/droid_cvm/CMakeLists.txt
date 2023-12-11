@@ -1,15 +1,20 @@
 ##################################################
 ###################Custom factors##################
 add_library(
-    custom_droid_factors
+    droid_dba_factors_cpp
     SHARED
     ./src/libs/droid_DBA_factor.cpp
     )
-target_include_directories(custom_droid_factors PRIVATE ./include)
+target_include_directories(droid_dba_factors_cpp PRIVATE ./include)
 target_link_libraries(
-    custom_droid_factors
+    droid_dba_factors_cpp
     gtsam
 )
+#############################################
+############### Python Wrapper ##############
+add_library(droid_dba_factors_py ./wrap/droid_dba_factor_pybinder.cpp)
+target_link_libraries(droid_dba_factors_py droid_dba_factors_cpp)
+target_include_directories(droid_dba_factors_py PRIVATE ./include)
 ###############################################
 ############ GENERAL LIBRARIES#################
 # factor graph reader library
