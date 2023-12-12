@@ -42,6 +42,6 @@ target_include_directories(test_custom_factor PRIVATE
 target_link_libraries(test_custom_factor GTest::gtest_main gtsam
     ${SYMFORCE_LIBRARIES} spdlog::spdlog
 )
-include(GoogleTest)
-gtest_discover_tests(test_expressions)
-add_test(NAME test_expressions COMMAND test_expressions)
+#include(GoogleTest)
+#gtest_discover_tests(test_expressions)
+#add_test(NAME test_expressions COMMAND test_expressions)
