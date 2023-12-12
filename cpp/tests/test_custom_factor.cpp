@@ -17,9 +17,10 @@
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/nonlinear/Expression.h>
 #include <vector>
+#include <gtsam/base/utilities.h>
 
 using namespace gtsam;
-
+using namespace droid_factors;
 double depth1 = 1, depth = 2;
 Point3 t_w_c;
 std::vector<Point2> pixel_coords = {Point2(10, 60), Point2(50, 50),
@@ -462,6 +463,7 @@ TEST(DroidDBAFactorTest, exceptionHandlingTest) {
   };
   EXPECT_THROW(dba_instance_fn(), CheiralityException);
 }
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
