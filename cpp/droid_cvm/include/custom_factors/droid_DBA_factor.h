@@ -15,7 +15,7 @@ private:
   typedef NoiseModelFactor3<Pose3, Pose3, double> Base;
   Point2 predicted_pixel_j_; // predicted measurement pixel in frame j
   Point2 pixel_i_;
-  Cal3_S2 K_;
+  boost::shared_ptr<Cal3_S2> K_;
   bool valid_;
 
 public:
@@ -29,28 +29,31 @@ public:
 
   // Constructor from a ternary measurement of pose of
   // frame i, frame j and depth of pixel in frame i
-  DroidDBAFactor(const Key pi, const Key pj, const Key di, const Point2 pixel_i,
-                 const Point2 predicted_pixel_j, const Cal3_S2 K,
+  DroidDBAFactor(const Key &pi, const Key &pj, const Key &di,
+                 const Point2 &pixel_i, const Point2 &predicted_pixel_j,
+                 const boost::shared_ptr<Cal3_S2> &K,
                  const SharedNoiseModel &model)
       : Base(model, pi, pj, di), predicted_pixel_j_(predicted_pixel_j),
         pixel_i_(pixel_i), K_(K){};
 
-  DroidDBAFactor(const Key pi, const Key pj, const Key di,
-                 const Point2 pixel_i, const Point2 predicted_pixel_j)
-      : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di), predicted_pixel_j_(predicted_pixel_j),
-        pixel_i_(pixel_i),K_(Cal3_S2(50, 50, 0, 50, 50)){};
+  DroidDBAFactor(const Key &pi, const Key &pj, const Key &di, const Point2 &pixel_i,
+                 const Point2 &predicted_pixel_j)
+      : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di),
+        predicted_pixel_j_(predicted_pixel_j), pixel_i_(pixel_i),
+        K_(new Cal3_S2(50, 50, 0, 50, 50)){};
 
-  DroidDBAFactor(const Key pi, const Key pj, const Key di,
-                 const Point2 pixel_i, const Point2 predicted_pixel_j,
-                 const Cal3_S2 K)
-      : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di), predicted_pixel_j_(predicted_pixel_j),
-        pixel_i_(pixel_i),K_(K){};
-  DroidDBAFactor(const Key pi, const Key pj, const Key di,
-                 const Point2 pixel_i, const Point2 predicted_pixel_j,
+  DroidDBAFactor(const Key &pi, const Key &pj, const Key &di, const Point2 &pixel_i,
+                 const Point2 &predicted_pixel_j,
+                 const boost::shared_ptr<Cal3_S2> &K)
+      : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di),
+        predicted_pixel_j_(predicted_pixel_j), pixel_i_(pixel_i), K_(K){};
+  DroidDBAFactor(const Key pi, const Key pj, const Key di, const Point2 pixel_i,
+                 const Point2 predicted_pixel_j,
                  const boost::shared_ptr<noiseModel::Base> &model)
       : Base(model, pi, pj, di), predicted_pixel_j_(predicted_pixel_j),
-        pixel_i_(pixel_i),K_(Cal3_S2(50, 50,0,50,50)){};
-  /* evaluateError() function computes the residual
+        pixel_i_(pixel_i), K_(new Cal3_S2(50, 50, 0, 50, 50)){};
+
+  /* @brief evaluateError() function computes the residual
    * For this problem we are evaluating the difference between the predicted
    * pixel and the reprojected pixel. The error is in pixel space.
    * cam_i = P(T_w_c2, K)
@@ -58,19 +61,17 @@ public:
    * depth)) In addition the custom factor defines the jacobians for the error
    * function.
    */
-  Vector evaluateError(const Pose3 &pose_i, const Pose3 &pose_j,
-                       const double &depth_i,
-                       boost::optional<Matrix &> H_pose_i = boost::none,
-                       boost::optional<Matrix &> H_pose_j = boost::none,
-                       boost::optional<Matrix &> H_depth_i = boost::none) const override;
+  Vector evaluateError(
+      const Pose3 &pose_i, const Pose3 &pose_j, const double &depth_i,
+      boost::optional<Matrix &> H_pose_i = boost::none,
+      boost::optional<Matrix &> H_pose_j = boost::none,
+      boost::optional<Matrix &> H_depth_i = boost::none) const override;
 
   //  gtsam::NonlinearFactor::shared_ptr clone() const override;
-  inline const Point2 &measurementIn() const { return predicted_pixel_j_; }
-  inline const Point2 &pixelInCam() const { return pixel_i_; }
-  inline const Cal3_S2 &Calibration() const { return K_; }
-  inline void setValid(bool flag){
-      valid_ = flag;
-  }
+  inline const Point2 &pixelInCam_j() const { return predicted_pixel_j_; }
+  inline const Point2 &pixelInCam_i() const { return pixel_i_; }
+  inline const auto &calibration() const { return K_; }
+  inline void setValid(bool flag) { valid_ = flag; }
   // TODO: serialization of factor
 };
-}; // namespace gtsam
+}; // namespace droid_factors
