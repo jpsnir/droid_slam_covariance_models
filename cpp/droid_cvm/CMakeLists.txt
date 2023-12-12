@@ -12,7 +12,16 @@ target_link_libraries(
 )
 #############################################
 ############### Python Wrapper ##############
+#add_library(libgtsampy SHARED IMPORTED) # or STATIC instead of SHARED
+#set_target_properties(libgtsampy PROPERTIES
+#  IMPORTED_LOCATION
+#  "/usr/local/lib/python3.8/dist-packages/gtsam-4.1.0-py3.8.egg/gtsam/gtsam.cpython-38-x86_64-linux-gnu.so"
+#  INTERFACE_INCLUDE_DIRECTORIES
+#  ""
+#)
+
 pybind11_add_module(droid_factors_py ./wrap/droid_factors_pybinder.cpp)
+# target_link_libraries(droid_factors_py PRIVATE droid_factors_cpp libgtsampy)
 target_link_libraries(droid_factors_py PRIVATE droid_factors_cpp)
 target_include_directories(droid_factors_py PRIVATE ./include
     ${pybind11_INCLUDE_DIRS})

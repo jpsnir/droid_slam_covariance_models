@@ -36,3 +36,7 @@ if(${BUILD_TESTS})
     enable_testing()
     add_subdirectory(tests)
 endif()
+add_test(NAME test_custom_factor COMMAND test_custom_factor)
+add_custom_command(
+    OUTPUT "test.log"
+    COMMAND test "python ./tests/test_droid_factor_py.py")
