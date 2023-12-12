@@ -1,6 +1,6 @@
 #include <custom_factors/droid_DBA_factor.h>
 
-namespace gtsam {
+namespace droid_factors {
 
 Vector DroidDBAFactor::evaluateError(
     const Pose3 &pose_i, const Pose3 &pose_j, const double &depth_i,
