@@ -47,6 +47,7 @@ public:
                  const boost::shared_ptr<Cal3_S2> &K)
       : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di),
         predicted_pixel_j_(predicted_pixel_j), pixel_i_(pixel_i), K_(K){};
+
   DroidDBAFactor(const Key pi, const Key pj, const Key di, const Point2 pixel_i,
                  const Point2 predicted_pixel_j,
                  const boost::shared_ptr<noiseModel::Base> &model)
