@@ -20,11 +20,15 @@ target_link_libraries(
 #  ""
 #)
 
-pybind11_add_module(droid_factors_py ./wrap/droid_factors_pybinder.cpp)
+set(GTSAM_TARGET_NAME gtsam)
+pybind11_add_module(droid_factors_py
+    ./wrap/droid_factors_pybinder.cpp)
 # target_link_libraries(droid_factors_py PRIVATE droid_factors_cpp libgtsampy)
-target_link_libraries(droid_factors_py PRIVATE droid_factors_cpp)
-target_include_directories(droid_factors_py PRIVATE ./include
+target_link_libraries(droid_factors_py PUBLIC droid_factors_cpp)
+target_include_directories(droid_factors_py PUBLIC ./include
     ${pybind11_INCLUDE_DIRS})
+#target_link_libraries(gtsam_py PUBLIC gtsam)
+#target_include_directories(gtsam_py PUBLIC ${GTSAM_INCLUDE_DIRS})
 ###############################################
 ############ GENERAL LIBRARIES#################
 # factor graph reader library

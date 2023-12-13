@@ -42,18 +42,25 @@ public:
         predicted_pixel_j_(predicted_pixel_j), pixel_i_(pixel_i),
         K_(new Cal3_S2(50, 50, 0, 50, 50)){};
 
+ // DroidDBAFactor(const Key &pi, const Key &pj, const Key &di, const Point2 &pixel_i,
+ //                const Point2 &predicted_pixel_j,
+ //                const Vector5 &k_vec)
+ //     : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di),
+ //       predicted_pixel_j_(predicted_pixel_j), pixel_i_(pixel_i), K_(new Cal3_S2(k_vec)){};
+
   DroidDBAFactor(const Key &pi, const Key &pj, const Key &di, const Point2 &pixel_i,
                  const Point2 &predicted_pixel_j,
                  const boost::shared_ptr<Cal3_S2> &K)
       : Base(noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2)), pi, pj, di),
         predicted_pixel_j_(predicted_pixel_j), pixel_i_(pixel_i), K_(K){};
-
+  /*
   DroidDBAFactor(const Key pi, const Key pj, const Key di, const Point2 pixel_i,
                  const Point2 predicted_pixel_j,
                  const boost::shared_ptr<noiseModel::Base> &model)
       : Base(model, pi, pj, di), predicted_pixel_j_(predicted_pixel_j),
         pixel_i_(pixel_i), K_(new Cal3_S2(50, 50, 0, 50, 50)){};
 
+*/
   /* @brief evaluateError() function computes the residual
    * For this problem we are evaluating the difference between the predicted
    * pixel and the reprojected pixel. The error is in pixel space.
