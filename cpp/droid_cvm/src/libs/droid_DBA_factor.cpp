@@ -1,6 +1,6 @@
 #include <custom_factors/droid_DBA_factor.h>
 
-namespace gtsam {
+namespace droid_factors {
 
 Vector DroidDBAFactor::evaluateError(
     const Pose3 &pose_i, const Pose3 &pose_j, const double &depth_i,
@@ -15,13 +15,13 @@ Vector DroidDBAFactor::evaluateError(
   Matrix33 H_pt_w;
   Matrix23 H_pt_c2;
   try {
-    PinholeCamera<Cal3_S2> camera1(pose_i, K_);
+    PinholeCamera<Cal3_S2> camera1(pose_i, *K_);
     Point3 backPrj_pt_w =
         camera1.backproject(pixel_i_, depth_i, H_c1, boost::none, H_di);
     Point3 pt_c2 = pose_j.transformTo(backPrj_pt_w, H_c2, H_pt_w);
     Matrix44 I = Matrix44::Identity();
     Pose3 pose_c2_c2 = Pose3(I);
-    PinholeCamera<Cal3_S2> camera2(pose_c2_c2, K_);
+    PinholeCamera<Cal3_S2> camera2(pose_c2_c2, *K_);
     Point2 reprojectedPt_j = camera2.project(pt_c2, boost::none, H_pt_c2);
     // error = reprojected - measured(predicted network)
     error = reprojectedPt_j - predicted_pixel_j_;

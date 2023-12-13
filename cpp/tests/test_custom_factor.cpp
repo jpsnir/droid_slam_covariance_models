@@ -17,9 +17,10 @@
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/nonlinear/Expression.h>
 #include <vector>
+#include <gtsam/base/utilities.h>
 
 using namespace gtsam;
-
+using namespace droid_factors;
 double depth1 = 1, depth = 2;
 Point3 t_w_c;
 std::vector<Point2> pixel_coords = {Point2(10, 60), Point2(50, 50),
@@ -287,7 +288,7 @@ TEST(DroidDBAFactorTest, Constructor) {
   std::vector<double> depths = {1.0, 2.0};
   std::vector<Point2> pixel_coords = {Point2(10, 60), Point2(50, 50),
                                       Point2(30, 40), Point2(30, 60)};
-  Cal3_S2 K(50, 50, 0, 50, 50);
+  boost::shared_ptr<Cal3_S2> K(new Cal3_S2(50, 50, 0, 50, 50));
   Rot3 R_w_c = Rot3::RzRyRx(-M_PI / 2, 0, -M_PI / 2);
   Pose3 pose_w_c1(R_w_c, Point3(2, 1, 0));
   Pose3 pose_w_c2(R_w_c, Point3(1.5, 1, 0));
@@ -298,9 +299,9 @@ TEST(DroidDBAFactorTest, Constructor) {
   auto pixel_i = pixel_coords[0];
   auto pixel_i_to_pixel_j = [&pixel_i, &K](Pose3 pose_w_ci, Pose3 pose_w_cj,
                                            double depth) {
-    PinholeCamera<Cal3_S2> camera1(pose_w_ci, K);
+    PinholeCamera<Cal3_S2> camera1(pose_w_ci, *K);
     Point3 backPrj_pt_w = camera1.backproject(pixel_i, depth);
-    PinholeCamera<Cal3_S2> camera2(pose_w_cj, K);
+    PinholeCamera<Cal3_S2> camera2(pose_w_cj, *K);
     return camera2.project(backPrj_pt_w);
   };
   SharedNoiseModel pixel_noise =
@@ -309,11 +310,11 @@ TEST(DroidDBAFactorTest, Constructor) {
       Point2(5, 5) + pixel_i_to_pixel_j(pose_w_c1, pose_w_c2, depth1);
   auto factor = DroidDBAFactor(p_k_1, p_k_2, d_k_1, pixel_i, predicted_pixel, K,
                                pixel_noise);
-  auto K_act = factor.Calibration();
-  auto pred_pixel_act = factor.measurementIn();
-  auto pixel_i_act = factor.pixelInCam();
+  auto K_act = factor.calibration();
+  auto pred_pixel_act = factor.pixelInCam_j();
+  auto pixel_i_act = factor.pixelInCam_i();
   auto k = factor.keys();
-  ASSERT_TRUE(K_act.equals(K));
+  ASSERT_TRUE((*K_act).equals(*K));
   ASSERT_TRUE(assert_equal(predicted_pixel, pred_pixel_act));
   ASSERT_TRUE(assert_equal(pixel_i_act, pixel_i));
   ASSERT_EQ(k[0], p_k_1);
@@ -330,7 +331,7 @@ TEST(DroidDBAFactorTest, evaluateError) {
                                       Point2(30, 40), Point2(30, 60)};
   std::vector<Point2> errors_expected = {Point2(5, 5), Point2(12, -10),
                                          Point2(23, 32), Point2(10, 15)};
-  Cal3_S2 K(50, 50, 0, 50, 50);
+  boost::shared_ptr<Cal3_S2> K(new Cal3_S2(50, 50, 0, 50, 50));
   Rot3 R_w_c = Rot3::RzRyRx(-M_PI / 2, 0, -M_PI / 2);
   Pose3 pose_w_c1(R_w_c, Point3(2, 1, 0));
   Pose3 pose_w_c2(R_w_c, Point3(1.5, 1, 0));
@@ -345,9 +346,9 @@ TEST(DroidDBAFactorTest, evaluateError) {
       auto error_expected = errors_expected[index];
       auto pixel_i_to_pixel_j = [&pixel_i, &K](Pose3 pose_w_ci, Pose3 pose_w_cj,
                                                double depth) {
-        PinholeCamera<Cal3_S2> camera1(pose_w_ci, K);
+        PinholeCamera<Cal3_S2> camera1(pose_w_ci, *K);
         Point3 backPrj_pt_w = camera1.backproject(pixel_i, depth);
-        PinholeCamera<Cal3_S2> camera2(pose_w_cj, K);
+        PinholeCamera<Cal3_S2> camera2(pose_w_cj, *K);
         return camera2.project(backPrj_pt_w);
       };
       SharedNoiseModel pixel_noise =
@@ -370,7 +371,7 @@ TEST(DroidDBAFactorTest, evaluateErrorDerivative) {
                                       Point2(30, 40), Point2(30, 60)};
   std::vector<Point2> errors_expected = {Point2(5, 5), Point2(12, -10),
                                          Point2(23, 32), Point2(10, 15)};
-  Cal3_S2 K(50, 50, 0, 50, 50);
+  boost::shared_ptr<Cal3_S2> K(new Cal3_S2(50, 50, 0, 50, 50));
   Rot3 R_w_c = Rot3::RzRyRx(-M_PI / 2, 0, -M_PI / 2);
   Pose3 pose_w_c1(R_w_c, Point3(2, 1, 0));
   Pose3 pose_w_c2(R_w_c, Point3(1.5, 1, 0));
@@ -385,9 +386,9 @@ TEST(DroidDBAFactorTest, evaluateErrorDerivative) {
       auto error_expected = errors_expected[index];
       auto pixel_i_to_pixel_j = [&pixel_i, &K](Pose3 pose_w_ci, Pose3 pose_w_cj,
                                                double depth) {
-        PinholeCamera<Cal3_S2> camera1(pose_w_ci, K);
+        PinholeCamera<Cal3_S2> camera1(pose_w_ci, *K);
         Point3 backPrj_pt_w = camera1.backproject(pixel_i, depth);
-        PinholeCamera<Cal3_S2> camera2(pose_w_cj, K);
+        PinholeCamera<Cal3_S2> camera2(pose_w_cj, *K);
         return camera2.project(backPrj_pt_w);
       };
       SharedNoiseModel pixel_noise =
@@ -408,10 +409,12 @@ TEST(DroidDBAFactorTest, evaluateErrorDerivative) {
       auto expectedH_pose2 =
           numericalDerivative32<Point2, Pose3, Pose3, double>(
               compute_error_fcn, pose_w_c1, pose_w_c2, depth);
-      auto expectedH_pose3 =
+      auto expectedH_depth =
           numericalDerivative33<Point2, Pose3, Pose3, double>(
               compute_error_fcn, pose_w_c1, pose_w_c2, depth);
       ASSERT_TRUE(assert_equal(expectedH_pose1, actualH_pose1, 1e-5));
+      ASSERT_TRUE(assert_equal(expectedH_pose2, actualH_pose2, 1e-5));
+      ASSERT_TRUE(assert_equal(expectedH_depth, actualH_d, 1e-5));
     }
   }
 }
@@ -424,7 +427,7 @@ TEST(DroidDBAFactorTest, exceptionHandlingTest) {
                                         Point2(30, 40), Point2(30, 60)};
     std::vector<Point2> errors_expected = {Point2(5, 5), Point2(12, -10),
                                            Point2(23, 32), Point2(10, 15)};
-    Cal3_S2 K(50, 50, 0, 50, 50);
+    boost::shared_ptr<Cal3_S2> K(new Cal3_S2(50, 50, 0, 50, 50));
     Rot3 R_w_c = Rot3::RzRyRx(-M_PI / 2, 0, -M_PI / 2);
     Pose3 pose_w_c1(R_w_c, Point3(2, 1, 0));
     Pose3 pose_w_c2(R_w_c, Point3(1.5, 1, 0));
@@ -438,9 +441,9 @@ TEST(DroidDBAFactorTest, exceptionHandlingTest) {
         auto error_expected = errors_expected[index];
         auto pixel_i_to_pixel_j =
             [&pixel_i, &K](Pose3 pose_w_ci, Pose3 pose_w_cj, double depth) {
-              PinholeCamera<Cal3_S2> camera1(pose_w_ci, K);
+              PinholeCamera<Cal3_S2> camera1(pose_w_ci, *K);
               Point3 backPrj_pt_w = camera1.backproject(pixel_i, depth);
-              PinholeCamera<Cal3_S2> camera2(pose_w_cj, K);
+              PinholeCamera<Cal3_S2> camera2(pose_w_cj, *K);
               return camera2.project(backPrj_pt_w);
             };
         SharedNoiseModel pixel_noise =
@@ -462,6 +465,7 @@ TEST(DroidDBAFactorTest, exceptionHandlingTest) {
   };
   EXPECT_THROW(dba_instance_fn(), CheiralityException);
 }
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
