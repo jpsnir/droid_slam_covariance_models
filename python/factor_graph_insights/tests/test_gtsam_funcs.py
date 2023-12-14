@@ -243,3 +243,36 @@ def test_Cal3_S2_function_jacobians():
     the calibrate and uncalibrate function wrt
     different variables.
     '''
+    # camera's z -> forward, x -> right, y -> down
+    # origin of coordinate frame at optical center.
+    T_wc = gtsam.Pose3(
+        r=gtsam.Rot3.RzRyRx(-np.pi / 2, 0, -np.pi / 2),
+        t=np.array([5, 0, 0])
+    )
+    cam = gtsam.Cal3_S2(50, 50, 0, 50, 50)
+    ph_camera = gtsam.PinholePoseCal3_S2(
+        pose=T_wc,
+        K=cam
+    )
+    # point in world coordinates
+    pt_3d_list = [gtsam.Point3(x=10, y=0, z=10),
+                  gtsam.Point3(x=10, y=10, z=0.01),
+                  gtsam.Point3(x=100, y=5, z=5),]
+    Dpose = np.zeros((2, 6), order='F')
+    Dpoint = np.zeros((2, 3), order='F')
+    Dcal = np.zeros((2, 5), order='F')
+
+    # taken from this test in gtsam
+    # https://github.com/borglab/gtsam/blob/develop/python/gtsam/tests/test_PinholeCamera.py
+    pt_2d = ph_camera.project(pt_3d_list[1], Dpose, Dpoint, Dcal)
+    depth = pt_3d_list[0][1]
+    # order is important as
+    H_c2 = np.zeros((3, 6), order='F')
+    H_p = np.zeros((3, 2), order='F')
+    H_d = np.zeros((3, 1), order='F')
+    H_cal = np.zeros((3, 5), order='F')
+    backprj_pt = ph_camera.backproject(pt_2d, depth)
+    assert (depth == backprj_pt[2])
+    backprj_pt = ph_camera.backproject(pt_2d, depth, H_c2, H_p, H_d, H_cal)
+    print(H_c2)
+    # print(H_d)
