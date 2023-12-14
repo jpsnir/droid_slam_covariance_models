@@ -38,26 +38,28 @@ def test_error_function():
     p_k_2 = gtsam.symbol("x", 2)
 
     dba_error = Droid_DBA_Error(kvec)
-    dba_error.pixel_to_project = pixel_coords[0]
-    dba_error.predicted_pixel = predicted_pixel[0]
 
-    error_computed = dba_error.error(
-        pose_i=pose_w_c1, pose_j=pose_w_c2, depth_i=depths[0]
-    )
-    assert error_computed.shape == (2, 1)
-    assert_allclose(
-        error_computed, errors_expected[0].reshape(2, 1), atol=1e-5, rtol=1e-5
-    )
+    for i in range(len(pixel_coords)):
+        dba_error.pixel_to_project = pixel_coords[i]
+        dba_error.predicted_pixel = predicted_pixel[i]
 
-    # check jacobian shapes
-    H_pose_1 = np.zeros([2, 6])
-    H_pose_2 = np.zeros([2, 6])
-    H_d = np.zeros([1, 6])
-    error_computed = dba_error.error(
-        pose_i=pose_w_c1,
-        pose_j=pose_w_c2,
-        depth_i=depths[0],
-        H_pose_i=H_pose_1,
-        H_pose_j=H_pose_2,
-        H_depth_i=H_d,
-    )
+        error_computed = dba_error.error(
+            pose_i=pose_w_c1, pose_j=pose_w_c2, depth_i=depths[0]
+        )
+        assert error_computed.shape == (2, 1)
+        assert_allclose(
+            error_computed, errors_expected[i].reshape(2, 1), atol=1e-5, rtol=1e-5
+        )
+
+        # check jacobian shapes
+        H_pose_1 = np.zeros([2, 6])
+        H_pose_2 = np.zeros([2, 6])
+        H_d = np.zeros([1, 6])
+        error_computed = dba_error.error(
+            pose_i=pose_w_c1,
+            pose_j=pose_w_c2,
+            depth_i=depths[0],
+            H_pose_i=H_pose_1,
+            H_pose_j=H_pose_2,
+            H_depth_i=H_d,
+        )
