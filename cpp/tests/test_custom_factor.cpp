@@ -419,6 +419,12 @@ TEST(DroidDBAFactorTest, evaluateErrorDerivative) {
       ASSERT_TRUE(assert_equal(expectedH_pose1, actualH_pose1, 1e-5));
       ASSERT_TRUE(assert_equal(expectedH_pose2, actualH_pose2, 1e-5));
       ASSERT_TRUE(assert_equal(expectedH_depth, actualH_d, 1e-5));
+      std::cout << "\n  H_pose1 - pixel -" << pixel_i <<
+                   " : \n" << expectedH_pose1 << std::endl;
+      std::cout << "\n  H_pose2 - pixel -" << pixel_i <<
+                   " : \n" << expectedH_pose2 << std::endl;
+      std::cout << "\n  H_depth - pixel -" << pixel_i <<
+                   " : \n" << expectedH_depth << std::endl;
     }
   }
 }

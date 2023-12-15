@@ -6,6 +6,7 @@ from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA
 import numpy as np
 from numpy.testing import assert_allclose
 import gtsam
+from numerical_derivative_py import numerical_derivative_dba as num_dba
 
 
 def test_constructor():
@@ -43,7 +44,7 @@ def test_error_function():
         dba_error.pixel_to_project = pixel_coords[i]
         dba_error.predicted_pixel = predicted_pixel[i]
 
-        error_computed = dba_error.error(
+        error_computed, H = dba_error.error(
             pose_i=pose_w_c1, pose_j=pose_w_c2, depth_i=depths[0]
         )
         assert error_computed.shape == (2, 1)
@@ -52,14 +53,60 @@ def test_error_function():
         )
 
         # check jacobian shapes
-        H_pose_1 = np.zeros([2, 6])
-        H_pose_2 = np.zeros([2, 6])
-        H_d = np.zeros([1, 6])
-        error_computed = dba_error.error(
+        error_computed, H = dba_error.error(
             pose_i=pose_w_c1,
             pose_j=pose_w_c2,
             depth_i=depths[0],
-            H_pose_i=H_pose_1,
-            H_pose_j=H_pose_2,
-            H_depth_i=H_d,
         )
+        assert H[0].shape == (2, 6)
+        assert H[1].shape == (2, 6)
+        assert H[2].shape == (2, 1)
+
+
+@pytest.mark.skip(
+    reason="The pybind module crashes when derivative is extracted, figure out eigen matrices"
+)
+def test_derivative():
+    kvec = np.array([50.0, 50.0, 0.0, 50.0, 50.0])
+    depths = [1.0, 2.0]
+    pixel_coords = [gtsam.Point2(10, 60), gtsam.Point2(50, 50), gtsam.Point2(30, 40)]
+    errors_expected = [gtsam.Point2(5, 5), gtsam.Point2(12, -10), gtsam.Point2(23, 32)]
+    predicted_pixel = [
+        gtsam.Point2(18.3333, 51.6667),
+        gtsam.Point2(38, 60),
+        gtsam.Point2(13.6667, 11.3333),
+    ]
+    kvec = np.array([50.0, 50.0, 0.0, 50.0, 50.0])
+    dba_error = Droid_DBA_Error(kvec)
+    dba_error.pixel_to_project = pixel_coords[0]
+    dba_error.predicted_pixel = predicted_pixel[0]
+    R_w_c = gtsam.Rot3.RzRyRx(-np.pi / 2, 0, -np.pi / 2)
+    pose_w_c1 = gtsam.Pose3(R_w_c, gtsam.Point3(2, 1, 0))
+    pose_w_c2 = gtsam.Pose3(R_w_c, gtsam.Point3(1.5, 1, 0))
+    error_computed, H = dba_error.error(
+        pose_i=pose_w_c1,
+        pose_j=pose_w_c2,
+        depth_i=depths[0],
+    )
+    print(f" Derivate pose 1: {H[0]}")
+    print(f" Derivate pose 2: {H[1]}")
+    print(f" Derivate depth: {H[2]}")
+    cov_mat = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.1, 0.2])).R()
+    numH_pose_1 = np.zeros([2, 6], order="F")
+    numH_pose_2 = np.zeros([2, 6], order="F")
+    numH_d = np.zeros([1, 6], order="F")
+    num_dba(
+        pose_w_c1.matrix(),
+        pose_w_c2.matrix(),
+        depths[0],
+        pixel_coords[0],
+        predicted_pixel[0],
+        cov_mat,
+        kvec,
+        numH_pose_1,
+        numH_pose_2,
+        numH_d,
+    )
+    assert_allclose(numH_pose_1, H[0], rtol=1e-5, atol=1e-5)
+    assert_allclose(numH_pose_2, H[1], rtol=1e-5, atol=1e-5)
+    assert_allclose(numH_d, H[2], rtol=1e-5, atol=1e-5)

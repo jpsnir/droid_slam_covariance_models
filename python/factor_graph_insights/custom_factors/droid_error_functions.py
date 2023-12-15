@@ -71,9 +71,6 @@ class Droid_DBA_Error:
         pose_i: gtsam.Pose3,
         pose_j: gtsam.Pose3,
         depth_i: np.float64,
-        H_pose_i: np.ndarray = None,
-        H_pose_j: np.ndarray = None,
-        H_depth_i: np.ndarray = None,
     ) -> np.ndarray:
         """
         Error function with optional Jacobians is implemented
@@ -110,13 +107,11 @@ class Droid_DBA_Error:
             assert self.reprojected_pt_j.shape == (2,)
             assert self._predicted_pixel_j.shape == (2, 1)
             self._error = self.reprojected_pt_j.reshape(2, 1) - self._predicted_pixel_j
-            if H_pose_i is not None:
-                H_pose_i = H_pt_c2 @ H_pt_w @ H_c1
-            if H_pose_j is not None:
-                H_pose_j = H_pt_c2 @ H_c2
-            if H_depth_i is not None:
-                H_depth_i = H_pt_c2 @ H_pt_w @ H_di
+            H_pose_i = H_pt_c2 @ H_pt_w @ H_c1
+            H_pose_j = H_pt_c2 @ H_c2
+            H_depth_i = H_pt_c2 @ H_pt_w @ H_di
+            self.H = [H_pose_i, H_pose_j, H_depth_i]
         except RuntimeError as e:
             self._error = np.zeros((2, 1))
             print(e)
-        return self._error
+        return self._error, self.H
