@@ -10,14 +10,15 @@
 #include <gtest/gtest.h>
 #include <gtsam/base/Testable.h>
 #include <gtsam/base/numericalDerivative.h>
+#include <gtsam/base/utilities.h>
 #include <gtsam/geometry/Cal3_S2.h>
 #include <gtsam/geometry/PinholeCamera.h>
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/nonlinear/Expression.h>
+#include <numerical_derivative_py.h>
 #include <vector>
-#include <gtsam/base/utilities.h>
 
 using namespace gtsam;
 using namespace droid_factors;
@@ -356,6 +357,9 @@ TEST(DroidDBAFactorTest, evaluateError) {
       // error function : e = p_r - p_m , reprojected - measured
       Point2 predicted_pixel =
           pixel_i_to_pixel_j(pose_w_c1, pose_w_c2, depth) - error_expected;
+      std::cout << "\n  Predicted Pixel (" << index << ")"
+                << " at depth:" << depth << "\n"
+                << predicted_pixel << std::endl;
       auto factor = DroidDBAFactor(p_k_1, p_k_2, d_k_1, pixel_i,
                                    predicted_pixel, K, pixel_noise);
       auto error_computed = factor.evaluateError(pose_w_c1, pose_w_c2, depth);
@@ -419,6 +423,66 @@ TEST(DroidDBAFactorTest, evaluateErrorDerivative) {
   }
 }
 
+TEST(DroidDBAPy, evaluateDerivative) {
+  //
+  std::vector<double> depths = {1.0, 2.0};
+  std::vector<Point2> pixel_coords = {Point2(10, 60), Point2(50, 50),
+                                      Point2(30, 40), Point2(30, 60)};
+  std::vector<Point2> errors_expected = {Point2(5, 5), Point2(12, -10),
+                                         Point2(23, 32), Point2(10, 15)};
+  Vector5 K_vec;
+  K_vec << 50, 50, 0, 50, 50;
+
+  boost::shared_ptr<Cal3_S2> K(new Cal3_S2(K_vec));
+  Rot3 R_w_c = Rot3::RzRyRx(-M_PI / 2, 0, -M_PI / 2);
+  Pose3 pose_w_c1(R_w_c, Point3(2, 1, 0));
+  Pose3 pose_w_c2(R_w_c, Point3(1.5, 1, 0));
+  Key d_k_1, p_k_1, p_k_2;
+  d_k_1 = Symbol('d', 1);
+  p_k_1 = Symbol('x', 1);
+  p_k_2 = Symbol('x', 2);
+
+  for (auto depth : depths) {
+    for (int index = 0; index < pixel_coords.size(); index++) {
+      auto pixel_i = pixel_coords[index];
+      auto error_expected = errors_expected[index];
+      auto pixel_i_to_pixel_j = [&pixel_i, &K](Pose3 pose_w_ci, Pose3 pose_w_cj,
+                                               double depth) {
+        PinholeCamera<Cal3_S2> camera1(pose_w_ci, *K);
+        Point3 backPrj_pt_w = camera1.backproject(pixel_i, depth);
+        PinholeCamera<Cal3_S2> camera2(pose_w_cj, *K);
+        return camera2.project(backPrj_pt_w);
+      };
+      Matrix22 cov;
+      SharedNoiseModel pixel_noise =
+          gtsam::noiseModel::Diagonal::Sigmas(Vector2(0.1, 0.2));
+      cov << 0.1, 0, 0, 0.2;
+      Point2 predicted_pixel =
+          error_expected + pixel_i_to_pixel_j(pose_w_c1, pose_w_c2, depth1);
+      Matrix num_H_pose1, num_H_pose2, num_H_d;
+      Matrix44  T_1 = pose_w_c1.matrix();
+      Matrix44 T_2 = pose_w_c2.matrix();
+
+      Matrix actualH_pose1, actualH_pose2, actualH_d;
+      auto factor = DroidDBAFactor(p_k_1, p_k_2, d_k_1, pixel_i,
+                                   predicted_pixel, K, pixel_noise);
+      auto error_actual = factor.evaluateError(
+          pose_w_c1, pose_w_c2, depth, actualH_pose1, actualH_pose2, actualH_d);
+
+      numerical_derivative_dba(T_1, T_2, depth,
+                               pixel_i, predicted_pixel,
+                               cov, K_vec,
+                               num_H_pose1,
+                               num_H_pose2, num_H_d);
+
+      /*
+      ASSERT_TRUE(assert_equal(num_H_pose1, actualH_pose1, 1e-5));
+      ASSERT_TRUE(assert_equal(num_H_pose2, actualH_pose2, 1e-5));
+      ASSERT_TRUE(assert_equal(num_H_d, actualH_d, 1e-5));
+      */
+    }
+  }
+}
 TEST(DroidDBAFactorTest, exceptionHandlingTest) {
   //
   auto dba_instance_fn = []() {

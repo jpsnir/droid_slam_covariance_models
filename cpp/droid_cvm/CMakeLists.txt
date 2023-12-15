@@ -13,6 +13,17 @@ target_link_libraries(
 #############################################
 ############### Python Wrapper ##############
 
+pybind11_add_module(numerical_derivative_py
+    ./src/libs/numerical_derivative_py.cpp
+    ./src/libs/droid_DBA_factor.cpp
+)
+
+target_include_directories(numerical_derivative_py
+    PRIVATE
+    ./include
+    ${pybind11_INCLUDE_DIRS} ${gtsam_INCLUDE_DIRS}
+)
+target_link_libraries(numerical_derivative_py PRIVATE gtsam)
 ###############################################
 ############ GENERAL LIBRARIES#################
 # factor graph reader library

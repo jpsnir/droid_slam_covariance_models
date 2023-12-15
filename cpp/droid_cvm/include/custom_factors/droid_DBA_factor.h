@@ -1,3 +1,6 @@
+#ifndef DROID_DBA_FACTOR_H
+#define DROID_DBA_FACTOR_H
+
 #include <boost/smart_ptr/shared_ptr.hpp>
 #include <gtsam/geometry/Cal3_S2.h>
 #include <gtsam/geometry/PinholeCamera.h>
@@ -58,3 +61,4 @@ public:
   // TODO: serialization of factor
 };
 }; // namespace droid_factors
+#endif
