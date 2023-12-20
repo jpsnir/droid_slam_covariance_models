@@ -6,6 +6,7 @@ In future, any new functions for computing error can be included in here.
 import gtsam
 import numpy as np
 import typing as T
+from functools import partial
 
 
 class Droid_DBA_Error:
@@ -29,6 +30,7 @@ class Droid_DBA_Error:
         self._pixel_i = None
         self.backprj_pt_w = np.zeros([3, 1])
         self._error = np.zeros([2, 1])
+        self._custom_factor = None
 
     @property
     def calibration(self):
@@ -115,3 +117,55 @@ class Droid_DBA_Error:
             self._error = np.zeros((2, 1))
             print(e)
         return self._error, self.H
+
+    @property
+    def custom_factor(self):
+        assert self._custom_factor is not None, "custom factor is not built yet."
+        return self._custom_factor
+
+    @property
+    def pixel_noise_model(self) -> gtsam.noiseModel:
+        assert self._pixel_noise_model is not None, "noise model is not assigned"
+        return self._pixel_noise_model
+
+    @pixel_noise_model.setter
+    def pixel_noise_model(self, noiseModel: gtsam.noiseModel):
+        self._pixel_noise_model = noiseModel
+
+    @property
+    def symbols(self) -> T.Tuple[int, int, int]:
+        return tuple(self._custom_factor.keys())
+
+    def make_custom_factor(
+        self,
+        symbols: T.Tuple[int, int, int],
+        predicted_pixel: np.ndarray,
+        pixel_to_project: np.ndarray,
+        vars: T.Tuple[gtsam.Pose3, gtsam.Pose3, float],
+        pixel_noise_vector: np.ndarray,
+    ) -> gtsam.CustomFactor:
+        """
+        custom factor for the error function
+        """
+        assert len(symbols) == 3, "Ternary factor, three keys are required, xi, xj, di"
+        assert (
+            len(vars) == 3
+        ), "Ternary factor, three variable values needed, xi, xj, and di"
+        assert pixel_noise_vector.shape == (2,), "noise vector shape should be (2,)"
+
+        self.pixel_noise_model = gtsam.noiseModel.Diagonal.Information(
+            np.diag(pixel_noise_vector)
+        )
+        self.predicted_pixel = predicted_pixel
+        self.pixel_to_project = pixel_to_project
+
+        # define factor for the pixel at (row, col)
+        self._symbols = symbols
+        symbol_xi, symbol_xj, symbol_di = symbols
+        keys = gtsam.KeyVector([symbol_xi, symbol_xj, symbol_di])
+        pose_i, pose_j, depth_i = vars
+        self._custom_factor = gtsam.CustomFactor(
+            self.pixel_noise_model,
+            keys,
+            partial(self.error, pose_i, pose_j, depth_i),
+        )
