@@ -8,9 +8,8 @@ datatype dependency relation between gtsam and sym module.
 """
 import os
 import sys
-import gtsam
-import sym
-import pickle
+from pathlib import Path
+from functools import partial
 import typing as T
 from typing import (
     Union,
@@ -21,16 +20,32 @@ from typing import (
 )
 from typing_extensions import Self
 import numpy as np
+import gtsam
 import torch
-from pathlib import Path
 from gtsam.symbol_shorthand import L, X
-from functools import partial
+
 import factor_graph_insights.custom_factors as droid_autogen
+from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
 import time
 
 # confidence map values will go here.
 
 init_values = gtsam.Values()
+
+
+class DataConverter:
+    @staticmethod
+    def to_gtsam_pose(pose: Union[np.ndarray, torch.Tensor]) -> gtsam.Pose3:
+        """
+        converts nd array pose to gtsam.Pose3
+        pose in nd array is tx, ty, tz, qw, qx, qy, qz
+        """
+        if isinstance(pose, torch.Tensor):
+            pose = pose.numpy()
+        assert pose.shape == (7,), "Pose is not 7x1 numpy array"
+        translation = pose[:3]
+        rotation = gtsam.Rot3(w=pose[6], x=pose[3], y=pose[4], z=pose[5])
+        return gtsam.Pose3(r=rotation, t=translation)
 
 
 class ImagePairFactorGraphBuilder:
@@ -45,8 +60,29 @@ class ImagePairFactorGraphBuilder:
         self._target_pts = None
         self._depths = None
         self._K = None
+        self._cal3s2_camera = None
         self._custom_factor_residual_func = None
-        self._camera = None
+        self._ph_camera_i = None
+        self._ph_camera_j = None
+        self._custom_factor = None
+        self._pose_i = None
+        self._pose_j = None
+
+    @property
+    def src_img_id(self) -> int:
+        return self.i
+
+    @src_img_id.setter
+    def src_img_id(self, i: int):
+        self.i = i
+
+    @property
+    def dst_img_id(self) -> int:
+        return self.j
+
+    @dst_img_id.setter
+    def dst_img_id(self, j: int):
+        self.j = j
 
     @property
     def image_size(self) -> Tuple[int, int]:
@@ -57,28 +93,68 @@ class ImagePairFactorGraphBuilder:
         self._image_size = torch.Size(image_size)
 
     @property
-    def calibration(self):
-        assert (self._calibration is not None, "Calibration parameters are not set")
-        return self._K
+    def calibration(self) -> torch.Tensor:
+        assert (self._K is not None, "Calibration parameters are not set")
+        return torch.tensor(self._K)
+
+    @property
+    def camera(self) -> gtsam.Cal3_S2:
+        assert (self._cal3s2_camera is not None, "Calibration parameters are not set")
+        return self._cal3s2_camera
 
     def set_calibration(self, calibration: torch.Tensor) -> Self:
-        self._K = calibration
-        self._camera = gtsam.Cal3_S2(
-            calibration[0],
-            calibration[1],
-            calibration[2],
-            calibration[3],
-            calibration[4],
+        self._K = calibration.numpy()
+        self._cal3s2_camera = gtsam.Cal3_S2(
+            self._K[0],
+            self._K[1],
+            0,
+            self._K[2],
+            self._K[3],
         )
+        return self
 
     @property
     def poses(self):
-        return self.pose_i, self.pose_j
+        assert self._pose_i is not None, "Pose i does not exist"
+        assert self._pose_j is not None, "Pose j does not exist"
 
-    def set_poses(self, pose_i: np.ndarray, pose_j: np.ndarray) -> Self:
+        return self._pose_i, self._pose_j
+
+    def set_poses(self, pose_i: torch.Tensor, pose_j: torch.Tensor) -> Self:
         """ """
+
         self._pose_i = pose_i
         self._pose_j = pose_j
+        return self
+
+    @property
+    def pinhole_cameras(
+        self,
+    ) -> Tuple[gtsam.PinholeCameraCal3_S2, gtsam.PinholeCameraCal3_S2]:
+        """get pinhole camera objects"""
+        assert self._ph_camera_i is not None, "pinhole camera i is not created"
+        assert self._ph_camera_j is not None, "pinhole camera j is not created"
+
+        return self._ph_camera_i, self._ph_camera_j
+
+    def create_pinhole_cameras(self) -> Self:
+        """make pinhole camera objects from poses and intrinsics"""
+        assert (
+            self._cal3s2_camera is not None
+        ), "set cal2s2 camera object for  creating pinhole cameras"
+
+        assert self._pose_i is not None, " Pose i is not set"
+        assert self._pose_j is not None, " Pose j is not set"
+        self._ph_camera_i = gtsam.PinholeCameraCal3_S2(
+            pose=DataConverter.to_gtsam_pose(self._pose_i),
+            K=self._cal3s2_camera,
+        )
+
+        self._ph_camera_j = gtsam.PinholeCameraCal3_S2(
+            pose=DataConverter.to_gtsam_pose(self._pose_j),
+            K=self._cal3s2_camera,
+        )
+        return self
 
     @property
     def target_pts(self):
@@ -92,6 +168,7 @@ class ImagePairFactorGraphBuilder:
             " Target point tensor does not match image size",
         )
         self._target_pts = target_pts
+        return self
 
     @property
     def depths(self):
@@ -105,6 +182,7 @@ class ImagePairFactorGraphBuilder:
             " Target depth size does not match image size",
         )
         self._depths = depths
+        return self
 
     @property
     def pixel_weights(self) -> torch.Tensor:
@@ -117,106 +195,70 @@ class ImagePairFactorGraphBuilder:
             f" Target weight size does not match image size",
         )
         self._weights = weights
+        return self
 
-    def set_custom_factor_residual(self, error_func: T.Callable) -> Self:
-        """
-        set the custom factor function that will go in Custom factor object
+    @property
+    def error_model(self) -> gtsam.CustomFactor:
+        assert self._error_model is not None, "Custom factor is not set"
+        return self._error_model
 
-        """
-        self._custom_factor_residual_func = partial(error_func)
+    @error_model.setter
+    def error_model(self, error_model: object):
+        """assigns the custom factor"""
 
-    def build(self) -> gtsam.NonlinearFactorGraph:
+        assert (
+            getattr(error_model, "error"),
+            "No attribute error function in error model",
+        )
+        assert (callable(error_model.error), "error attribute is not callable")
+        self._error_model = error_model
+        return self
+
+    def is_pt_close_to_cam(
+        self, pixel_i: Union[Tuple[int, int], np.ndarray], min_depth: float
+    ) -> bool:
+        if isinstance(pixel_i, Tuple):
+            assert (
+                len(pixel_i) == 2
+            ), "Shape mismatch, - row, columns - two values required"
+            pixel_i = np.array(pixel_i)
+        if isinstance(pixel_i, np.ndarray):
+            assert pixel_i.shape == (2,), "Shape mismatch - required (2,)"
+
+        row, col = pixel_i
+        depth_i = self._depths[row, col].item()
+        pt3d_w = self._ph_camera_i.backproject(pixel_i, depth_i)
+        gtsam_pose_j = DataConverter.to_gtsam_pose(self._pose_j)
+        pt3d_j = gtsam_pose_j.inverse().transformTo(pt3d_w)
+        depth_j = pt3d_j[2]
+        return depth_j < min_depth
+
+    def build_visual_factor_graph(self) -> gtsam.NonlinearFactorGraph:
         """
         build a non-linear factor graph
         """
-        # self._custom_factor = gtsam.CustomFactor(
-        #     pixel_noise_model,
-        #     keys,
-        #     partial(
-        #         droid_slam_error_func,
-        #         dst_img_coords,
-        #         src_img_coords,
-        #         intrinsics,
-        #     ),
-        # )
+        ROWS, COLS = self._image_size
+        s_x_i = gtsam.symbol("x", self.i)
+        s_x_j = gtsam.symbol("x", self.i)
+        for row in range(ROWS):
+            for col in range(COLS):
+                # each depth in ith camera has to be assigned a symbol
+                # as it will be optimized as a variable.
+                depth_flag = self.is_pt_close_to_cam((row, col), 0.25)
 
-
-def convert_to_gtsam_pose(pose: np.ndarray) -> gtsam.Pose3:
-    """
-    converts nd array pose to gtsam.Pose3
-    pose in nd array is tx, ty, tz, qw, qx, qy, qz
-    """
-
-    translation = pose[:3]
-    rotation = gtsam.Rot3(w=pose[6], x=pose[3], y=pose[4], z=pose[5])
-    return gtsam.Pose3(r=rotation, t=translation)
-
-
-def gtsam2sym_pose(pose: gtsam.Pose3) -> sym.Pose3:
-    """
-    converts nd array pose from factor graph data to
-    sym.pose3 type
-    """
-    # assuming pose in this sequence : tx, ty, tz, qx, qy, qz, qw .
-    #
-    q = pose.rotation().toQuaternion()  # gtsam type
-    rotation = sym.Rot3(np.array([q.x(), q.y(), q.z(), q.w()]))
-    translation = np.array([pose.x(), pose.y(), pose.z()])
-    return sym.Pose3(R=rotation, t=translation)
-
-
-def convert_to_sym_camera(cam_intrinsics: np.ndarray) -> sym.LinearCameraCal:
-    """
-    converts the intrinsic parameters into sym.LinearCameraCal type
-    """
-    f_length = cam_intrinsics[:2]
-    principal_pt = cam_intrinsics[2:]
-    K = sym.LinearCameraCal(focal_length=f_length, principal_point=principal_pt)
-    return K
-
-
-def droid_slam_error_func(
-    dst_img_coords: np.ndarray,
-    src_img_coords: np.ndarray,
-    cam_intrinsics: np.ndarray,
-    this: gtsam.CustomFactor,
-    v: gtsam.Values,
-    H: Optional[List[np.ndarray]],
-) -> np.ndarray:
-    """
-    droid slam custom factor definition.
-    """
-    pose_i_key = this.keys()[0]
-    pose_j_key = this.keys()[1]
-    depth_key = this.keys()[2]
-    print(
-        f"Keys accessed : pose_i - {pose_i_key}, pose_j - {pose_j_key},\
-            depth_key - {depth_key}"
-    )
-    w_pose_i, w_pose_j = v.atPose3(pose_i_key), v.atPose3(pose_j_key)
-    depth = v.atDouble(depth_key)
-    sym_pose_i = gtsam2sym_pose(w_pose_i)
-    sym_pose_j = gtsam2sym_pose(w_pose_j)
-    sym_camera = convert_to_sym_camera(cam_intrinsics)
-    (error, jacobian, hessian, rhs) = droid_autogen.droid_slam_residual_single_factor(
-        dst_img_coords,
-        src_img_coords,
-        d_src=depth,
-        w_pose_i=sym_pose_i,
-        w_pose_j=sym_pose_j,
-        K=sym_camera,
-        epsilon=0.01,
-    )
-    # print(f'error={error}, {type(error), error.shape}')
-    # print(f'jacobian={jacobian}, {type(jacobian), jacobian.shape}')
-    # print(f'hessian={hessian}, {type(hessian), hessian.shape}')
-    # print(f'rhs={rhs}, {type(rhs), rhs.shape}')
-    if H is not None:
-        H[0] = jacobian[:, :6]
-        H[1] = jacobian[:, 6:12]
-        H[2] = jacobian[:, 12]
-
-    return error
+                s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
+                if not init_values.exists(symbol_di):
+                    init_values.insert(symbol_di, depth[row, col].numpy())
+                # define noise for each pixel from confidence map or weight
+                # matrix
+                print(f"depth of point in {j} camera - {depth_j} - {depth_j < 0.25}")
+                if depth_j < 0.25:
+                    w = np.array([0, 0])
+                else:
+                    w = 0.001 * weights[:, row, col].numpy().reshape(2)
+                self._error_model.make_custom_factor()
+                graph.add(self._error_model.custom_factor)
+                count_symbol += 1
 
 
 def factor_graph_image_pair(
