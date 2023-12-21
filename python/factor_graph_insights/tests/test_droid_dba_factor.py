@@ -77,11 +77,10 @@ def test_droid_dba_custom_factor():
     p_k_1 = gtsam.symbol("x", 1)
     p_k_2 = gtsam.symbol("x", 2)
     droid_dba_error = Droid_DBA_Error(kvec)
+    droid_dba_error.pixel_to_project = pixel_coords
+    droid_dba_error.predicted_pixel = predicted_pixel
     droid_dba_error.make_custom_factor(
         (p_k_1, p_k_2, d_k_1),
-        predicted_pixel,
-        pixel_coords,
-        (pose_w_c1, pose_w_c2, depth),
         pixel_confidence,
     )
 

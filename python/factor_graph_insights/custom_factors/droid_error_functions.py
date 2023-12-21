@@ -154,31 +154,22 @@ class Droid_DBA_Error:
     def make_custom_factor(
         self,
         symbols: T.Tuple[int, int, int],
-        predicted_pixel: np.ndarray,
-        pixel_to_project: np.ndarray,
-        vars: T.Tuple[gtsam.Pose3, gtsam.Pose3, float],
-        pixel_noise_vector: np.ndarray,
+        pixel_confidence: np.ndarray,
     ) -> gtsam.CustomFactor:
         """
         custom factor for the error function
         """
         assert len(symbols) == 3, "Ternary factor, three keys are required, xi, xj, di"
-        assert (
-            len(vars) == 3
-        ), "Ternary factor, three variable values needed, xi, xj, and di"
-        assert pixel_noise_vector.shape == (2,), "noise vector shape should be (2,)"
+        assert pixel_confidence.shape == (2,), "noise vector shape should be (2,)"
 
         self.pixel_noise_model = gtsam.noiseModel.Diagonal.Information(
-            np.diag(pixel_noise_vector)
+            np.diag(pixel_confidence)
         )
-        self.predicted_pixel = predicted_pixel
-        self.pixel_to_project = pixel_to_project
 
         # define factor for the pixel at (row, col)
         self._symbols = symbols
         symbol_xi, symbol_xj, symbol_di = symbols
         keys = gtsam.KeyVector([symbol_xi, symbol_xj, symbol_di])
-        pose_i, pose_j, depth_i = vars
         self._custom_factor = gtsam.CustomFactor(
             self.pixel_noise_model,
             keys,
