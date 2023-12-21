@@ -63,6 +63,55 @@ def test_error_function():
         assert H[2].shape == (2, 1)
 
 
+def test_droid_dba_custom_factor():
+    kvec = np.array([50.0, 50.0, 0.0, 50.0, 50.0])
+    depth = 1.0
+    pixel_coords = gtsam.Point2(10, 60)
+    pixel_confidence = np.array([0.9, 0.9])
+    errors_expected = gtsam.Point2(5, 5)
+    predicted_pixel = gtsam.Point2(18.3333, 51.6667)
+    R_w_c = gtsam.Rot3.RzRyRx(-np.pi / 2, 0, -np.pi / 2)
+    pose_w_c1 = gtsam.Pose3(R_w_c, gtsam.Point3(2, 1, 0))
+    pose_w_c2 = gtsam.Pose3(R_w_c, gtsam.Point3(1.5, 1, 0))
+    d_k_1 = gtsam.symbol("d", 1)
+    p_k_1 = gtsam.symbol("x", 1)
+    p_k_2 = gtsam.symbol("x", 2)
+    droid_dba_error = Droid_DBA_Error(kvec)
+    droid_dba_error.make_custom_factor(
+        (p_k_1, p_k_2, d_k_1),
+        predicted_pixel,
+        pixel_coords,
+        (pose_w_c1, pose_w_c2, depth),
+        pixel_confidence,
+    )
+
+    assert isinstance(droid_dba_error.custom_factor, gtsam.CustomFactor)
+    assert_allclose(droid_dba_error.pixel_to_project, pixel_coords.reshape(2, 1))
+    assert_allclose(droid_dba_error.predicted_pixel, predicted_pixel.reshape(2, 1))
+
+    # check keys
+    assert droid_dba_error.symbols == (p_k_1, p_k_2, d_k_1)
+    assert tuple(droid_dba_error.custom_factor.keys()) == (p_k_1, p_k_2, d_k_1)
+
+    # check error
+    error_expected, Jacobian = droid_dba_error.error(pose_w_c1, pose_w_c2, depth)
+    # mahanalobnis distance = 0.5 * e' * I * e, I is information matrix
+    mh_dist = 0.5 * error_expected.T @ np.diag(pixel_confidence) @ error_expected
+    values = gtsam.Values()
+    values.insert(p_k_1, pose_w_c1)
+    values.insert(p_k_2, pose_w_c2)
+    values.insert(d_k_1, depth)
+    assert_allclose(
+        droid_dba_error.custom_factor.unwhitenedError(values).reshape(2, 1),
+        error_expected,
+    )
+    # error is the mahanalobnis distance
+    assert_allclose(
+        droid_dba_error.custom_factor.error(values),
+        mh_dist,
+    )
+
+
 @pytest.mark.skip(
     reason="The pybind module crashes when derivative is extracted, figure out eigen matrices"
 )

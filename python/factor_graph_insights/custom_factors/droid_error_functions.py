@@ -136,6 +136,21 @@ class Droid_DBA_Error:
     def symbols(self) -> T.Tuple[int, int, int]:
         return tuple(self._custom_factor.keys())
 
+    def _custom_factor_error_func(
+        self, this: gtsam.CustomFactor, v: gtsam.Values, H: T.List[np.ndarray]
+    ) -> np.ndarray:
+        """"""
+        p_k_1 = this.keys()[0]
+        p_k_2 = this.keys()[1]
+        d_k_1 = this.keys()[2]
+        pose_i, pose_j, depth_i = v.atPose3(p_k_1), v.atPose3(p_k_2), v.atDouble(d_k_1)
+        error, H_ = self.error(pose_i, pose_j, depth_i)
+        if H is not None:
+            H[0] = H_[0]
+            H[1] = H_[1]
+            H[2] = H_[2]
+        return error
+
     def make_custom_factor(
         self,
         symbols: T.Tuple[int, int, int],
@@ -167,5 +182,5 @@ class Droid_DBA_Error:
         self._custom_factor = gtsam.CustomFactor(
             self.pixel_noise_model,
             keys,
-            partial(self.error, pose_i, pose_j, depth_i),
+            self._custom_factor_error_func,
         )
