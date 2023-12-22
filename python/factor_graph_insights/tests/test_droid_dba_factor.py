@@ -95,7 +95,8 @@ def test_droid_dba_custom_factor():
     # check error
     error_expected, Jacobian = droid_dba_error.error(pose_w_c1, pose_w_c2, depth)
     # mahanalobnis distance = 0.5 * e' * I * e, I is information matrix
-    mh_dist = 0.5 * error_expected.T @ np.diag(pixel_confidence) @ error_expected
+    I = np.diag(pixel_confidence)
+    mh_dist = 0.5 * error_expected.T @ I @ error_expected
     values = gtsam.Values()
     values.insert(p_k_1, pose_w_c1)
     values.insert(p_k_2, pose_w_c2)
@@ -109,6 +110,21 @@ def test_droid_dba_custom_factor():
         droid_dba_error.custom_factor.error(values),
         mh_dist,
     )
+
+    # Jacobians
+    H_list = []
+    H1 = np.zeros([2, 6], order="F")
+    H = droid_dba_error.custom_factor.linearize(values)
+    H1 = H.jacobian()[0][:, 0:6]
+    H2 = H.jacobian()[0][:, 6:12]
+    H3 = H.jacobian()[0][:, 12].reshape(2, 1)
+
+    assert H1.shape == (2, 6)
+    assert H2.shape == (2, 6)
+    assert H3.shape == (2, 1)
+    assert_allclose(H1, np.sqrt(I) @ Jacobian[0])
+    assert_allclose(H2, np.sqrt(I) @ Jacobian[1])
+    assert_allclose(H3, np.sqrt(I) @ Jacobian[2])
 
 
 @pytest.mark.skip(
@@ -155,6 +171,7 @@ def test_derivative():
         numH_pose_2,
         numH_d,
     )
+
     assert_allclose(numH_pose_1, H[0], rtol=1e-5, atol=1e-5)
     assert_allclose(numH_pose_2, H[1], rtol=1e-5, atol=1e-5)
     assert_allclose(numH_d, H[2], rtol=1e-5, atol=1e-5)
