@@ -307,61 +307,6 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         return graph
 
 
-# def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
-#     """
-#     build factor graph from complete data
-#     """
-#     graph_data = fg_data["graph_data"]
-#     depth = fg_data["disps"]
-#     poses = fg_data["poses"]
-#     weights = fg_data["c_map"]
-#     predicted = fg_data["predicted"]
-#     K = fg_data["intrinsics"]
-#     ii = graph_data["ii"]
-#     jj = graph_data["jj"]
-#     pair_unique_id = {}
-#     if n == 0:
-#         n = ii.size()[0]
-#     unique_id = 0
-#     full_graph = gtsam.NonlinearFactorGraph()
-#     print(
-#         f"""Graph index - {graph_data['ii'].size()},
-#               poses - {poses.size()},
-#               ---------------------------
-#               weights - shape = {weights.size()},
-#               ---------------------------
-#               predicted - shape = {predicted.size()},
-#               ---------------------------
-#               depth - shape = {depth.size()},
-#               -------------------------------
-#               intrinics - shape = {K.size()}, {K},
-#         """
-#     )
-#     for index, (ix, jx) in enumerate(zip(ii[:n], jj[:n])):
-#         key = (ix, jx)
-#         if key not in pair_unique_id.keys():
-#             pair_unique_id[key] = unique_id
-#             unique_id += 1
-#         if max(ix, jx).item() > poses.size()[0] - 1:
-#             print(f"Ignoring index - {ix , jx} - out of bounds")
-#             continue
-#         print(f"Index - {index} - Adding factors for {ix} - {jx} edge")
-#         graph = factor_graph_image_pair(
-#             i=ix,
-#             j=jx,
-#             pair_id=unique_id,
-#             pose_i=poses[ix],
-#             pose_j=poses[jx],
-#             depth=depth[ix],
-#             weights=weights[index],
-#             target_pt=predicted[index],
-#             intrinsics=K,
-#         )
-#         full_graph.push_back(graph)
-#     print(f"Number of factors in full factor graph = {full_graph.nrFactors()}")
-#     return full_graph
-
-
 # if __name__ == "__main__":
 #     N = 5
 #     fg_dir = Path("/media/jagatpreet/D/datasets/uw_rig/samples").joinpath(
