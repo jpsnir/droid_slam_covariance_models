@@ -53,18 +53,50 @@ class BAProblem:
     """
 
     def __init__(self, factor_graph_data: dict):
-        required_keys = ["poses", "disps", "c_map", "ii", "jj"]
+        required_keys = [
+            "poses",
+            "disps",
+            "c_map",
+            "ii",
+            "jj",
+            "intrinsics",
+            "predicted",
+        ]
 
         for r_key in required_keys:
             assert (
                 r_key in factor_graph_data.keys()
             ), f"Cannot initialize the BA problem. Dictionary Key {r_key} is missing"
+        assert (
+            factor_graph_data["ii"].shape == factor_graph_data["jj"].shape
+        ), "Covisibility graph size mismatch, src(i) nodes not equal to dst(j) nodes"
 
         self._poses = factor_graph_data["poses"]
-        self._disps = factor_graph_data["disps"]
+        self._depths = factor_graph_data["disps"]
         self._c_map = factor_graph_data["c_map"]
         self._ii = factor_graph_data["ii"]
         self._jj = factor_graph_data["jj"]
+        self._K = factor_graph_data["intrinsics"]
+
+    @property
+    def poses(self):
+        return self._poses
+
+    @property
+    def depth_maps(self):
+        return self._depths
+
+    @property
+    def confidence_map(self):
+        return self._c_map
+
+    @property
+    def src_nodes(self):
+        return self._ii
+
+    @property
+    def dst_nodes(self):
+        return self._jj
 
 
 # def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
