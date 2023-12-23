@@ -137,13 +137,23 @@ class Droid_DBA_Error:
         return tuple(self._custom_factor.keys())
 
     def _custom_factor_error_func(
-        self, this: gtsam.CustomFactor, v: gtsam.Values, H: T.List[np.ndarray]
+        self,
+        pixels: T.Union[T.Tuple, T.List],
+        this: gtsam.CustomFactor,
+        v: gtsam.Values,
+        H: T.List[np.ndarray],
     ) -> np.ndarray:
-        """"""
+        """
+        defines a ternary factor error function
+        for the given pair of pixels, poses, and keys.
+        """
         p_k_1 = this.keys()[0]
         p_k_2 = this.keys()[1]
         d_k_1 = this.keys()[2]
         pose_i, pose_j, depth_i = v.atPose3(p_k_1), v.atPose3(p_k_2), v.atDouble(d_k_1)
+        self.pixel_to_project = pixels[0]
+        self.predicted_pixel = pixels[1]
+        # for the given pixels
         error, H_ = self.error(pose_i, pose_j, depth_i)
         if H is not None:
             H[0] = H_[0]
@@ -154,6 +164,7 @@ class Droid_DBA_Error:
     def make_custom_factor(
         self,
         symbols: T.Tuple[int, int, int],
+        pixels,
         pixel_confidence: np.ndarray,
     ) -> gtsam.CustomFactor:
         """
@@ -161,6 +172,11 @@ class Droid_DBA_Error:
         """
         assert len(symbols) == 3, "Ternary factor, three keys are required, xi, xj, di"
         assert pixel_confidence.shape == (2,), "noise vector shape should be (2,)"
+        if isinstance(pixels, dict):
+            assert "pixel_i" in dict.keys(), " pixel_i key should be present"
+            assert "pixel_j" in dict.keys(), " pixel_j key should be present"
+            pixels = (pixels["pixel_i"], pixels["pixel_j"])
+        assert len(pixels) == 2, " (pixel to project, predicted pixel) are required"
 
         self.pixel_noise_model = gtsam.noiseModel.Diagonal.Information(
             np.diag(pixel_confidence)
@@ -170,8 +186,10 @@ class Droid_DBA_Error:
         self._symbols = symbols
         symbol_xi, symbol_xj, symbol_di = symbols
         keys = gtsam.KeyVector([symbol_xi, symbol_xj, symbol_di])
+        # define custom factor with pixel noise model, symbol keys,
+        # error funcition
         self._custom_factor = gtsam.CustomFactor(
             self.pixel_noise_model,
             keys,
-            self._custom_factor_error_func,
+            partial(self._custom_factor_error_func, pixels),
         )
