@@ -48,7 +48,16 @@ class DataConverter:
         return gtsam.Pose3(r=rotation, t=translation)
 
 
-class ImagePairFactorGraphBuilder:
+class FactorGraphBuilder:
+    def __init__():
+        """Stub initialization"""
+
+    def build_factor_graph(self):
+        """"""
+        # stub method
+
+
+class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     """Image pair factor builder for an arbitrary image size"""
 
     def __init__(self, i, j, image_size: Tuple[int, int]) -> Self:
@@ -67,6 +76,10 @@ class ImagePairFactorGraphBuilder:
         self._custom_factor = None
         self._pose_i = None
         self._pose_j = None
+        self._gtsam_pose_i = None
+        self._gtsam_pose_j = None
+        self._graph = None
+        self._error_model = None
 
     @property
     def src_img_id(self) -> int:
@@ -94,12 +107,12 @@ class ImagePairFactorGraphBuilder:
 
     @property
     def calibration(self) -> torch.Tensor:
-        assert (self._K is not None, "Calibration parameters are not set")
+        assert self._K is not None, "Calibration parameters are not set"
         return torch.tensor(self._K)
 
     @property
     def camera(self) -> gtsam.Cal3_S2:
-        assert (self._cal3s2_camera is not None, "Calibration parameters are not set")
+        assert self._cal3s2_camera is not None, "Calibration parameters are not set"
         return self._cal3s2_camera
 
     def set_calibration(self, calibration: torch.Tensor) -> Self:
@@ -107,9 +120,9 @@ class ImagePairFactorGraphBuilder:
         self._cal3s2_camera = gtsam.Cal3_S2(
             self._K[0],
             self._K[1],
-            0,
             self._K[2],
             self._K[3],
+            self._K[4],
         )
         return self
 
@@ -120,11 +133,16 @@ class ImagePairFactorGraphBuilder:
 
         return self._pose_i, self._pose_j
 
-    def set_poses(self, pose_i: torch.Tensor, pose_j: torch.Tensor) -> Self:
+    def set_poses_and_cameras(self, pose_i: torch.Tensor, pose_j: torch.Tensor) -> Self:
         """ """
 
         self._pose_i = pose_i
         self._pose_j = pose_j
+        self._gtsam_pose_i = DataConverter.to_gtsam_pose(self._pose_i)
+        self._gtsam_pose_j = DataConverter.to_gtsam_pose(self._pose_j)
+        # as soon as you set new poses, pinhole cameras are created.
+        self._create_pinhole_cameras()
+
         return self
 
     @property
@@ -137,7 +155,7 @@ class ImagePairFactorGraphBuilder:
 
         return self._ph_camera_i, self._ph_camera_j
 
-    def create_pinhole_cameras(self) -> Self:
+    def _create_pinhole_cameras(self) -> Self:
         """make pinhole camera objects from poses and intrinsics"""
         assert (
             self._cal3s2_camera is not None
@@ -171,9 +189,15 @@ class ImagePairFactorGraphBuilder:
         return self
 
     @property
-    def depths(self):
+    def depths(self) -> torch.Tensor:
         assert self._depths is not None, " Depths are not set."
         return self._depths
+
+    def depthAt(self, pixel: Union[Tuple, List]) -> float:
+        assert self._depths is not None, "Depths are not set."
+        assert len(pixel) == 2, "Input pixel should be a a Tuple or list of length 2"
+        row, col = pixel
+        return float(self._depths[row, col])
 
     def set_depths(self, depths: torch.Tensor) -> Self:
         """"""
@@ -212,10 +236,17 @@ class ImagePairFactorGraphBuilder:
         )
         assert (callable(error_model.error), "error attribute is not callable")
         self._error_model = error_model
-        return self
 
-    def is_pt_close_to_cam(
-        self, pixel_i: Union[Tuple[int, int], np.ndarray], min_depth: float
+    @property
+    def factor_graph(self) -> gtsam.NonlinearFactorGraph:
+        assert self._graph is not None, "Factor graph is not defined"
+        return self._graph
+
+    def depth_to_cam_j(
+        self,
+        pixel_i: Union[Tuple[int, int], np.ndarray],
+        depth_i,
+        near_depth_threshold: float = 0.25,
     ) -> bool:
         if isinstance(pixel_i, Tuple):
             assert (
@@ -226,270 +257,287 @@ class ImagePairFactorGraphBuilder:
             assert pixel_i.shape == (2,), "Shape mismatch - required (2,)"
 
         row, col = pixel_i
-        depth_i = self._depths[row, col].item()
+        # point in world
         pt3d_w = self._ph_camera_i.backproject(pixel_i, depth_i)
-        gtsam_pose_j = DataConverter.to_gtsam_pose(self._pose_j)
-        pt3d_j = gtsam_pose_j.inverse().transformTo(pt3d_w)
+        # convert point to camera j coordinate system from world
+        pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
         depth_j = pt3d_j[2]
-        return depth_j < min_depth
+        is_near = depth_j < near_depth_threshold
+        return depth_j, is_near
 
-    def build_visual_factor_graph(self) -> gtsam.NonlinearFactorGraph:
+    def build_factor_graph(self, confidence_factor=0.001) -> gtsam.NonlinearFactorGraph:
         """
+        overrides base class
         build a non-linear factor graph
         """
+        graph = gtsam.NonlinearFactorGraph()
         ROWS, COLS = self._image_size
         s_x_i = gtsam.symbol("x", self.i)
-        s_x_j = gtsam.symbol("x", self.i)
+        s_x_j = gtsam.symbol("x", self.j)
+        count_symbol = 0
         for row in range(ROWS):
             for col in range(COLS):
                 # each depth in ith camera has to be assigned a symbol
                 # as it will be optimized as a variable.
-                depth_flag = self.is_pt_close_to_cam((row, col), 0.25)
-
+                depth_j, is_close = self.depth_to_cam_j((row, col), 0.25)
                 s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
-                if not init_values.exists(symbol_di):
-                    init_values.insert(symbol_di, depth[row, col].numpy())
+                self._symbols = (s_x_i, s_x_j, s_d_i)
+                # if not init_values.exists(symbol_di):
+                #     init_values.insert(symbol_di, depth[row, col].numpy())
+
                 # define noise for each pixel from confidence map or weight
                 # matrix
-                print(f"depth of point in {j} camera - {depth_j} - {depth_j < 0.25}")
-                if depth_j < 0.25:
-                    w = np.array([0, 0])
+                if is_close:
+                    pixel_confidence = np.array([0, 0])
                 else:
-                    w = 0.001 * weights[:, row, col].numpy().reshape(2)
-                self._error_model.make_custom_factor()
+                    pixel_confidence = (
+                        confidence_factor * self._weights[:, row, col].numpy()
+                    )
+                ## Add factor
+                assert pixel_confidence.shape == (2,)
+                pixel_to_project = np.array([row, col])
+                predicted_pixel = self._target_pts[row, col].numpy()
+                pixels = (pixel_to_project, predicted_pixel)
+                vars = (self._gtsam_pose_i, self._gtsam_pose_j, self._depths[row, col])
+                self.error_model.make_custom_factor(
+                    self._symbols,
+                    pixels,
+                    pixel_confidence,
+                )
                 graph.add(self._error_model.custom_factor)
                 count_symbol += 1
+        return graph
 
 
-def factor_graph_image_pair(
-    i: int,
-    j: int,
-    pair_id: int,
-    pose_i: Union[np.ndarray, torch.Tensor],
-    pose_j: Union[np.ndarray, torch.Tensor],
-    depth: Union[np.ndarray, torch.Tensor],
-    weights: Union[np.ndarray, torch.Tensor],
-    target_pt: Union[np.ndarray, torch.Tensor],
-    intrinsics: Union[np.ndarray, torch.Tensor],
-) -> gtsam.NonlinearFactorGraph:
-    """
-    generates the factor graph of one image pair
+# def factor_graph_image_pair(
+#     i: int,
+#     j: int,
+#     pair_id: int,
+#     pose_i: Union[np.ndarray, torch.Tensor],
+#     pose_j: Union[np.ndarray, torch.Tensor],
+#     depth: Union[np.ndarray, torch.Tensor],
+#     weights: Union[np.ndarray, torch.Tensor],
+#     target_pt: Union[np.ndarray, torch.Tensor],
+#     intrinsics: Union[np.ndarray, torch.Tensor],
+# ) -> gtsam.NonlinearFactorGraph:
+#     """
+#     generates the factor graph of one image pair
 
-    :param weights: weights(i->j) assigned for each pixel in the given each image pair
-    """
-    # todo check sizes of each matrix
-    ROWS = depth.size()[0]
-    COLS = depth.size()[1]
-    symbol_xi = gtsam.symbol("x", i)
-    symbol_xj = gtsam.symbol("x", j)
-    if isinstance(intrinsics, torch.Tensor):
-        k_matrix = intrinsics.numpy()
-    else:
-        k_matrix = intrinsics
-    pose_i_gtsam = convert_to_gtsam_pose(pose_i.numpy())
-    pose_j_gtsam = convert_to_gtsam_pose(pose_j.numpy())
-    if not init_values.exists(symbol_xi):
-        init_values.insert(symbol_xi, pose_i_gtsam)
-    if not init_values.exists(symbol_xj):
-        init_values.insert(symbol_xj, pose_j_gtsam)
+#     :param weights: weights(i->j) assigned for each pixel in the given each image pair
+#     """
+#     # todo check sizes of each matrix
+#     ROWS = depth.size()[0]
+#     COLS = depth.size()[1]
+#     symbol_xi = gtsam.symbol("x", i)
+#     symbol_xj = gtsam.symbol("x", j)
+#     if isinstance(intrinsics, torch.Tensor):
+#         k_matrix = intrinsics.numpy()
+#     else:
+#         k_matrix = intrinsics
+#     pose_i_gtsam = convert_to_gtsam_pose(pose_i.numpy())
+#     pose_j_gtsam = convert_to_gtsam_pose(pose_j.numpy())
+#     if not init_values.exists(symbol_xi):
+#         init_values.insert(symbol_xi, pose_i_gtsam)
+#     if not init_values.exists(symbol_xj):
+#         init_values.insert(symbol_xj, pose_j_gtsam)
 
-    # define pinhole model
-    camera = gtsam.Cal3_S2(k_matrix[0], k_matrix[1], 0, k_matrix[2], k_matrix[3])
-    # perspective camera model
-    ph_camera_i = gtsam.PinholePoseCal3_S2(
-        pose=pose_i_gtsam,
-        K=camera,
-    )
-    ph_camera_j = gtsam.PinholePoseCal3_S2(
-        pose=pose_j_gtsam,
-        K=camera,
-    )
-    graph = gtsam.NonlinearFactorGraph()
-    # Poses are to be optimized.
-    # X_i and X_j so they are assigned symbols.
-    count_symbol = 0
-    for row, d_row in enumerate(depth):
-        for col, d in enumerate(d_row):
-            # each depth in ith camera has to be assigned a symbol
-            # as it will be optimized as a variable.
+#     # define pinhole model
+#     camera = gtsam.Cal3_S2(k_matrix[0], k_matrix[1], 0, k_matrix[2], k_matrix[3])
+#     # perspective camera model
+#     ph_camera_i = gtsam.PinholePoseCal3_S2(
+#         pose=pose_i_gtsam,
+#         K=camera,
+#     )
+#     ph_camera_j = gtsam.PinholePoseCal3_S2(
+#         pose=pose_j_gtsam,
+#         K=camera,
+#     )
+#     graph = gtsam.NonlinearFactorGraph()
+#     # Poses are to be optimized.
+#     # X_i and X_j so they are assigned symbols.
+#     count_symbol = 0
+#     for row, d_row in enumerate(depth):
+#         for col, d in enumerate(d_row):
+#             # each depth in ith camera has to be assigned a symbol
+#             # as it will be optimized as a variable.
 
-            symbol_di = gtsam.symbol("d", ROWS * COLS * i + count_symbol)
+#             symbol_di = gtsam.symbol("d", ROWS * COLS * i + count_symbol)
 
-            if not init_values.exists(symbol_di):
-                init_values.insert(symbol_di, depth[row, col].numpy())
-            # define noise for each pixel from confidence map or weight
-            # matrix
-            xy_i = np.array([row, col])
-            depth_xy_i = depth[row, col].item()
-            pt3d_w = ph_camera_i.backproject(xy_i, depth_xy_i)
-            pt3d_j = pose_j_gtsam.inverse().transformTo(pt3d_w)
-            depth_j = pt3d_j[2]
-            print(f"depth of point in {j} camera - {depth_j} - {depth_j < 0.25}")
-            if depth_j < 0.25:
-                w = np.array([0, 0])
-            else:
-                w = 0.001 * weights[:, row, col].numpy().reshape(2)
-            pixel_noise_model = gtsam.noiseModel.Diagonal.Information(np.diag(w))
-            pixel_noise_model.print()
-            dst_img_coords = target_pt[:, row, col].numpy().reshape(2, 1)
-            src_img_coords = np.array([row, col]).reshape(2, 1)
-            # define factor for the pixel at (row, col)
-            keys = gtsam.KeyVector([symbol_xi, symbol_xj, symbol_di])
-            custom_factor = gtsam.CustomFactor(
-                pixel_noise_model,
-                keys,
-                partial(
-                    droid_slam_error_func,
-                    dst_img_coords,
-                    src_img_coords,
-                    intrinsics,
-                ),
-            )
-            graph.add(custom_factor)
-            count_symbol += 1
-    return graph
-
-
-def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
-    """
-    build factor graph from complete data
-    """
-    graph_data = fg_data["graph_data"]
-    depth = fg_data["disps"]
-    poses = fg_data["poses"]
-    weights = fg_data["c_map"]
-    predicted = fg_data["predicted"]
-    K = fg_data["intrinsics"]
-    ii = graph_data["ii"]
-    jj = graph_data["jj"]
-    pair_unique_id = {}
-    if n == 0:
-        n = ii.size()[0]
-    unique_id = 0
-    full_graph = gtsam.NonlinearFactorGraph()
-    print(
-        f"""Graph index - {graph_data['ii'].size()},
-              poses - {poses.size()},
-              ---------------------------
-              weights - shape = {weights.size()},
-              ---------------------------
-              predicted - shape = {predicted.size()},
-              ---------------------------
-              depth - shape = {depth.size()},
-              -------------------------------
-              intrinics - shape = {K.size()}, {K},
-        """
-    )
-    for index, (ix, jx) in enumerate(zip(ii[:n], jj[:n])):
-        key = (ix, jx)
-        if key not in pair_unique_id.keys():
-            pair_unique_id[key] = unique_id
-            unique_id += 1
-        if max(ix, jx).item() > poses.size()[0] - 1:
-            print(f"Ignoring index - {ix , jx} - out of bounds")
-            continue
-        print(f"Index - {index} - Adding factors for {ix} - {jx} edge")
-        graph = factor_graph_image_pair(
-            i=ix,
-            j=jx,
-            pair_id=unique_id,
-            pose_i=poses[ix],
-            pose_j=poses[jx],
-            depth=depth[ix],
-            weights=weights[index],
-            target_pt=predicted[index],
-            intrinsics=K,
-        )
-        full_graph.push_back(graph)
-    print(f"Number of factors in full factor graph = {full_graph.nrFactors()}")
-    return full_graph
+#             if not init_values.exists(symbol_di):
+#                 init_values.insert(symbol_di, depth[row, col].numpy())
+#             # define noise for each pixel from confidence map or weight
+#             # matrix
+#             xy_i = np.array([row, col])
+#             depth_xy_i = depth[row, col].item()
+#             pt3d_w = ph_camera_i.backproject(xy_i, depth_xy_i)
+#             pt3d_j = pose_j_gtsam.inverse().transformTo(pt3d_w)
+#             depth_j = pt3d_j[2]
+#             print(f"depth of point in {j} camera - {depth_j} - {depth_j < 0.25}")
+#             if depth_j < 0.25:
+#                 w = np.array([0, 0])
+#             else:
+#                 w = 0.001 * weights[:, row, col].numpy().reshape(2)
+#             pixel_noise_model = gtsam.noiseModel.Diagonal.Information(np.diag(w))
+#             pixel_noise_model.print()
+#             dst_img_coords = target_pt[:, row, col].numpy().reshape(2, 1)
+#             src_img_coords = np.array([row, col]).reshape(2, 1)
+#             # define factor for the pixel at (row, col)
+#             keys = gtsam.KeyVector([symbol_xi, symbol_xj, symbol_di])
+#             custom_factor = gtsam.CustomFactor(
+#                 pixel_noise_model,
+#                 keys,
+#                 partial(
+#                     droid_slam_error_func,
+#                     dst_img_coords,
+#                     src_img_coords,
+#                     intrinsics,
+#                 ),
+#             )
+#             graph.add(custom_factor)
+#             count_symbol += 1
+#     return graph
 
 
-if __name__ == "__main__":
-    N = 5
-    fg_dir = Path("/media/jagatpreet/D/datasets/uw_rig/samples").joinpath(
-        "woodshole_east_dock_1/factorgraph_data_2023_11_27_16_10_29"
-    )
-    if fg_dir.exists():
-        files_list = sorted(os.listdir(fg_dir))
-    print(f"Number of files = {len(files_list)}")
-    fg_file = fg_dir.joinpath(files_list[0])
+# def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
+#     """
+#     build factor graph from complete data
+#     """
+#     graph_data = fg_data["graph_data"]
+#     depth = fg_data["disps"]
+#     poses = fg_data["poses"]
+#     weights = fg_data["c_map"]
+#     predicted = fg_data["predicted"]
+#     K = fg_data["intrinsics"]
+#     ii = graph_data["ii"]
+#     jj = graph_data["jj"]
+#     pair_unique_id = {}
+#     if n == 0:
+#         n = ii.size()[0]
+#     unique_id = 0
+#     full_graph = gtsam.NonlinearFactorGraph()
+#     print(
+#         f"""Graph index - {graph_data['ii'].size()},
+#               poses - {poses.size()},
+#               ---------------------------
+#               weights - shape = {weights.size()},
+#               ---------------------------
+#               predicted - shape = {predicted.size()},
+#               ---------------------------
+#               depth - shape = {depth.size()},
+#               -------------------------------
+#               intrinics - shape = {K.size()}, {K},
+#         """
+#     )
+#     for index, (ix, jx) in enumerate(zip(ii[:n], jj[:n])):
+#         key = (ix, jx)
+#         if key not in pair_unique_id.keys():
+#             pair_unique_id[key] = unique_id
+#             unique_id += 1
+#         if max(ix, jx).item() > poses.size()[0] - 1:
+#             print(f"Ignoring index - {ix , jx} - out of bounds")
+#             continue
+#         print(f"Index - {index} - Adding factors for {ix} - {jx} edge")
+#         graph = factor_graph_image_pair(
+#             i=ix,
+#             j=jx,
+#             pair_id=unique_id,
+#             pose_i=poses[ix],
+#             pose_j=poses[jx],
+#             depth=depth[ix],
+#             weights=weights[index],
+#             target_pt=predicted[index],
+#             intrinsics=K,
+#         )
+#         full_graph.push_back(graph)
+#     print(f"Number of factors in full factor graph = {full_graph.nrFactors()}")
+#     return full_graph
 
-    # Prior noise definition for first two poses.
-    #  3D rotational standard deviation of prior factor - gaussian model
-    #  (degrees)
-    prior_rpy_sigma = 1
-    # 3D translational standard deviation of of prior factor - gaussian model
-    # (meters)
-    prior_xyz_sigma = 0.05
-    sigma_angle = np.deg2rad(prior_rpy_sigma)
-    prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
-        np.array(
-            [
-                sigma_angle,
-                sigma_angle,
-                sigma_angle,
-                prior_xyz_sigma,
-                prior_xyz_sigma,
-                prior_xyz_sigma,
-            ]
-        )
-    )
-    symbol_first_pose = gtsam.symbol("x", 0)
-    symbol_second_pose = gtsam.symbol("x", 1)
-    print(f"Analyzing file : { fg_file}")
-    fg_data = import_fg_from_pickle_file(fg_file)
-    print_factor_graph_stats(fg_data)
-    graph = build_factor_graph(fg_data, N)
-    graph.push_back(
-        gtsam.PriorFactorPose3(
-            symbol_first_pose, init_values.atPose3(symbol_first_pose), prior_noise_model
-        )
-    )
-    graph.push_back(
-        gtsam.PriorFactorPose3(
-            symbol_second_pose,
-            init_values.atPose3(symbol_first_pose),
-            prior_noise_model,
-        )
-    )
 
-    print(f"Number of factors={graph.nrFactors()}")
-    flag = input("Linearize graph initial values: 0-> No, 1-> yes")
-    jac_list = []
-    b_list = []
-    cov_list = []
-    info_list = []
-    if int(flag):
-        print(f"Errors init values = {graph.error(init_values)}")
-        lin_graph1 = graph.linearize(init_values)
-        jac, b = lin_graph1.jacobian()
-        cov = np.linalg.inv(jac.transpose() @ jac)
-        info = jac.transpose() @ jac
-    jac_list.append(jac)
-    b_list.append(b)
-    info_list.append(info)
-    cov_list.append(cov)
-    jac_list.append(jac)
-    b_list.append(b)
-    info_list.append(info)
-    cov_list.append(cov)
-    marginals_init = gtsam.Marginals(graph, init_values)
-    sys.exit(0)
-    number_of_iters = input("Enter integer number of iterations for optimization:")
-    print(f"Number of iterations {number_of_iters}")
-    time.sleep(2)
-    params = gtsam.LevenbergMarquardtParams()
-    params.setMaxIterations(int(number_of_iters))
-    print(f" LM params: {params}")
-    optimizer = gtsam.LevenbergMarquardtOptimizer(graph, init_values, params)
-    result = optimizer.optimize()
-    print(f"Final result :\n {result}")
-    marginals_new = gtsam.Marginals(graph, result)
-    flag = input("Linearize graph final values: 0-> No, 1-> yes")
-    if int(flag):
-        print(f"Errors final values = {graph.error(result)}")
-        lin_graph2 = graph.linearize(result)
-        jac, b = lin_graph2.jacobian()
-        cov = np.linalg.inv(jac.transpose() @ jac)
-        info = jac.transpose() @ jac
+# if __name__ == "__main__":
+#     N = 5
+#     fg_dir = Path("/media/jagatpreet/D/datasets/uw_rig/samples").joinpath(
+#         "woodshole_east_dock_1/factorgraph_data_2023_11_27_16_10_29"
+#     )
+#     if fg_dir.exists():
+#         files_list = sorted(os.listdir(fg_dir))
+#     print(f"Number of files = {len(files_list)}")
+#     fg_file = fg_dir.joinpath(files_list[0])
+
+#     # Prior noise definition for first two poses.
+#     #  3D rotational standard deviation of prior factor - gaussian model
+#     #  (degrees)
+#     prior_rpy_sigma = 1
+#     # 3D translational standard deviation of of prior factor - gaussian model
+#     # (meters)
+#     prior_xyz_sigma = 0.05
+#     sigma_angle = np.deg2rad(prior_rpy_sigma)
+#     prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
+#         np.array(
+#             [
+#                 sigma_angle,
+#                 sigma_angle,
+#                 sigma_angle,
+#                 prior_xyz_sigma,
+#                 prior_xyz_sigma,
+#                 prior_xyz_sigma,
+#             ]
+#         )
+#     )
+#     symbol_first_pose = gtsam.symbol("x", 0)
+#     symbol_second_pose = gtsam.symbol("x", 1)
+#     print(f"Analyzing file : { fg_file}")
+#     fg_data = import_fg_from_pickle_file(fg_file)
+#     print_factor_graph_stats(fg_data)
+#     graph = build_factor_graph(fg_data, N)
+#     graph.push_back(
+#         gtsam.PriorFactorPose3(
+#             symbol_first_pose, init_values.atPose3(symbol_first_pose), prior_noise_model
+#         )
+#     )
+#     graph.push_back(
+#         gtsam.PriorFactorPose3(
+#             symbol_second_pose,
+#             init_values.atPose3(symbol_first_pose),
+#             prior_noise_model,
+#         )
+#     )
+
+#     print(f"Number of factors={graph.nrFactors()}")
+#     flag = input("Linearize graph initial values: 0-> No, 1-> yes")
+#     jac_list = []
+#     b_list = []
+#     cov_list = []
+#     info_list = []
+#     if int(flag):
+#         print(f"Errors init values = {graph.error(init_values)}")
+#         lin_graph1 = graph.linearize(init_values)
+#         jac, b = lin_graph1.jacobian()
+#         cov = np.linalg.inv(jac.transpose() @ jac)
+#         info = jac.transpose() @ jac
+#     jac_list.append(jac)
+#     b_list.append(b)
+#     info_list.append(info)
+#     cov_list.append(cov)
+#     jac_list.append(jac)
+#     b_list.append(b)
+#     info_list.append(info)
+#     cov_list.append(cov)
+#     marginals_init = gtsam.Marginals(graph, init_values)
+#     sys.exit(0)
+#     number_of_iters = input("Enter integer number of iterations for optimization:")
+#     print(f"Number of iterations {number_of_iters}")
+#     time.sleep(2)
+#     params = gtsam.LevenbergMarquardtParams()
+#     params.setMaxIterations(int(number_of_iters))
+#     print(f" LM params: {params}")
+#     optimizer = gtsam.LevenbergMarquardtOptimizer(graph, init_values, params)
+#     result = optimizer.optimize()
+#     print(f"Final result :\n {result}")
+#     marginals_new = gtsam.Marginals(graph, result)
+#     flag = input("Linearize graph final values: 0-> No, 1-> yes")
+#     if int(flag):
+#         print(f"Errors final values = {graph.error(result)}")
+#         lin_graph2 = graph.linearize(result)
+#         jac, b = lin_graph2.jacobian()
+#         cov = np.linalg.inv(jac.transpose() @ jac)
+#         info = jac.transpose() @ jac
