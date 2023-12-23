@@ -55,21 +55,11 @@ class BAProblem:
     def __init__(self, factor_graph_data: dict):
         required_keys = ["poses", "disps", "c_map", "ii", "jj"]
 
-        assert (
-            "poses" in factor_graph_data.keys()
-        ), "Cannot initialize the BA problem. Dictionary Key 'poses' is missing"
-        assert (
-            "disps" in factor_graph_data.keys()
-        ), "Cannot initialize the BA problem. Dictionary Key 'disps' is missing"
-        assert (
-            "c_map" in factor_graph_data.keys()
-        ), "Cannot initialize the BA problem. Dictionary Key 'c_map' is missing"
-        assert (
-            "ii" in factor_graph_data.keys()
-        ), "Cannot initialize the BA problem. Dictionary Key 'ii' is missing"
-        assert (
-            "jj" in factor_graph_data.keys()
-        ), "Cannot initialize the BA problem. Dictionary Key 'jj' is missing"
+        for r_key in required_keys:
+            assert (
+                r_key in factor_graph_data.keys()
+            ), f"Cannot initialize the BA problem. Dictionary Key {r_key} is missing"
+
         self._poses = factor_graph_data["poses"]
         self._disps = factor_graph_data["disps"]
         self._c_map = factor_graph_data["c_map"]
