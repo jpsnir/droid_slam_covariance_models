@@ -1,9 +1,7 @@
 """
-This module provides utilities for creating a factor graph
-from a given .pkl file obtained from droid slam.
-The factor graph is constructed using gtsam.
-The custom factor generated from symforce need to be integrated with proper
-datatype dependency relation between gtsam and sym module.
+This module provides utilities for creating a factor graph of 
+ternary factors for droid slam error function.
+Creates a factor graph for a pair of images. 
 @author : jagatpreet
 """
 import os
@@ -307,95 +305,6 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
                 graph.add(self._error_model.custom_factor)
                 count_symbol += 1
         return graph
-
-
-# def factor_graph_image_pair(
-#     i: int,
-#     j: int,
-#     pair_id: int,
-#     pose_i: Union[np.ndarray, torch.Tensor],
-#     pose_j: Union[np.ndarray, torch.Tensor],
-#     depth: Union[np.ndarray, torch.Tensor],
-#     weights: Union[np.ndarray, torch.Tensor],
-#     target_pt: Union[np.ndarray, torch.Tensor],
-#     intrinsics: Union[np.ndarray, torch.Tensor],
-# ) -> gtsam.NonlinearFactorGraph:
-#     """
-#     generates the factor graph of one image pair
-
-#     :param weights: weights(i->j) assigned for each pixel in the given each image pair
-#     """
-#     # todo check sizes of each matrix
-#     ROWS = depth.size()[0]
-#     COLS = depth.size()[1]
-#     symbol_xi = gtsam.symbol("x", i)
-#     symbol_xj = gtsam.symbol("x", j)
-#     if isinstance(intrinsics, torch.Tensor):
-#         k_matrix = intrinsics.numpy()
-#     else:
-#         k_matrix = intrinsics
-#     pose_i_gtsam = convert_to_gtsam_pose(pose_i.numpy())
-#     pose_j_gtsam = convert_to_gtsam_pose(pose_j.numpy())
-#     if not init_values.exists(symbol_xi):
-#         init_values.insert(symbol_xi, pose_i_gtsam)
-#     if not init_values.exists(symbol_xj):
-#         init_values.insert(symbol_xj, pose_j_gtsam)
-
-#     # define pinhole model
-#     camera = gtsam.Cal3_S2(k_matrix[0], k_matrix[1], 0, k_matrix[2], k_matrix[3])
-#     # perspective camera model
-#     ph_camera_i = gtsam.PinholePoseCal3_S2(
-#         pose=pose_i_gtsam,
-#         K=camera,
-#     )
-#     ph_camera_j = gtsam.PinholePoseCal3_S2(
-#         pose=pose_j_gtsam,
-#         K=camera,
-#     )
-#     graph = gtsam.NonlinearFactorGraph()
-#     # Poses are to be optimized.
-#     # X_i and X_j so they are assigned symbols.
-#     count_symbol = 0
-#     for row, d_row in enumerate(depth):
-#         for col, d in enumerate(d_row):
-#             # each depth in ith camera has to be assigned a symbol
-#             # as it will be optimized as a variable.
-
-#             symbol_di = gtsam.symbol("d", ROWS * COLS * i + count_symbol)
-
-#             if not init_values.exists(symbol_di):
-#                 init_values.insert(symbol_di, depth[row, col].numpy())
-#             # define noise for each pixel from confidence map or weight
-#             # matrix
-#             xy_i = np.array([row, col])
-#             depth_xy_i = depth[row, col].item()
-#             pt3d_w = ph_camera_i.backproject(xy_i, depth_xy_i)
-#             pt3d_j = pose_j_gtsam.inverse().transformTo(pt3d_w)
-#             depth_j = pt3d_j[2]
-#             print(f"depth of point in {j} camera - {depth_j} - {depth_j < 0.25}")
-#             if depth_j < 0.25:
-#                 w = np.array([0, 0])
-#             else:
-#                 w = 0.001 * weights[:, row, col].numpy().reshape(2)
-#             pixel_noise_model = gtsam.noiseModel.Diagonal.Information(np.diag(w))
-#             pixel_noise_model.print()
-#             dst_img_coords = target_pt[:, row, col].numpy().reshape(2, 1)
-#             src_img_coords = np.array([row, col]).reshape(2, 1)
-#             # define factor for the pixel at (row, col)
-#             keys = gtsam.KeyVector([symbol_xi, symbol_xj, symbol_di])
-#             custom_factor = gtsam.CustomFactor(
-#                 pixel_noise_model,
-#                 keys,
-#                 partial(
-#                     droid_slam_error_func,
-#                     dst_img_coords,
-#                     src_img_coords,
-#                     intrinsics,
-#                 ),
-#             )
-#             graph.add(custom_factor)
-#             count_symbol += 1
-#     return graph
 
 
 # def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
