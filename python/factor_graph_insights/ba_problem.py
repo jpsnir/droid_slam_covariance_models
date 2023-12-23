@@ -9,6 +9,8 @@ from typing import (
     List,
     Dict,
 )
+import torch
+import numpy as np
 
 
 class FactorGraphData:
@@ -57,8 +59,7 @@ class BAProblem:
             "poses",
             "disps",
             "c_map",
-            "ii",
-            "jj",
+            "graph_data",
             "intrinsics",
             "predicted",
         ]
@@ -68,35 +69,62 @@ class BAProblem:
                 r_key in factor_graph_data.keys()
             ), f"Cannot initialize the BA problem. Dictionary Key {r_key} is missing"
         assert (
-            factor_graph_data["ii"].shape == factor_graph_data["jj"].shape
-        ), "Covisibility graph size mismatch, src(i) nodes not equal to dst(j) nodes"
+            "ii",
+            factor_graph_data["graph_data"],
+        ), "Cannot initialize BA problem, src (ii) nodes data does not exist in graph data"
+        assert (
+            "jj",
+            factor_graph_data["graph_data"],
+        ), "Cannot initialize BA problem, dst (jj) nodes data does not exist in graph data"
+        assert (
+            factor_graph_data["graph_data"]["ii"].shape
+            == factor_graph_data["graph_data"]["jj"].shape
+        ), "Cannot initialize BA problem, Covisibility graph size mismatch, src(i) nodes not equal to dst(j) nodes"
 
         self._poses = factor_graph_data["poses"]
         self._depths = factor_graph_data["disps"]
         self._c_map = factor_graph_data["c_map"]
-        self._ii = factor_graph_data["ii"]
-        self._jj = factor_graph_data["jj"]
+        self._ii = factor_graph_data["graph_data"]["ii"]
+        self._jj = factor_graph_data["graph_data"]["jj"]
         self._K = factor_graph_data["intrinsics"]
+        self._convert_to_gtsam_K()
+        self._predicted = factor_graph_data["predicted"]
 
     @property
-    def poses(self):
+    def poses(self) -> torch.Tensor:
         return self._poses
 
     @property
-    def depth_maps(self):
+    def depth_maps(self) -> torch.Tensor:
         return self._depths
 
     @property
-    def confidence_map(self):
+    def confidence_map(self) -> torch.Tensor:
         return self._c_map
 
     @property
-    def src_nodes(self):
+    def src_nodes(self) -> torch.Tensor:
         return self._ii
 
     @property
-    def dst_nodes(self):
+    def dst_nodes(self) -> torch.Tensor:
         return self._jj
+
+    @property
+    def calibration(self) -> torch.Tensor:
+        return self._K
+
+    @property
+    def calibration_gtsam(self) -> np.ndarray:
+        return self._gtsam_kvec
+
+    @property
+    def predicted_pixels(self) -> np.ndarray:
+        return self._predicted
+
+    def _convert_to_gtsam_K(self):
+        k = self._K.numpy()
+        self._gtsam_kvec = np.array([k[0], k[1], 0, k[2], k[3]])
 
 
 # def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:

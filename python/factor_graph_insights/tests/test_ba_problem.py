@@ -1,6 +1,7 @@
 import pytest
-from factor_graph_insights.ba_problem import BAProblem
+from factor_graph_insights.ba_problem import BAProblem, FactorGraphData
 import torch
+from pathlib import Path
 
 
 @pytest.fixture
@@ -19,6 +20,11 @@ def edges(keyframes):
 @pytest.fixture
 def image_size():
     return (3, 3)
+
+
+@pytest.fixture
+def pkl_file_path():
+    return Path("./tests/fg_data.pkl")
 
 
 @pytest.fixture
@@ -43,8 +49,10 @@ def factor_graph_data(keyframes, edges, image_size):
         "poses": poses,
         "disps": disps,
         "c_map": c_map,
-        "ii": ii,
-        "jj": jj,
+        "graph_data": {
+            "ii": ii,
+            "jj": jj,
+        },
         "predicted": predicted,
         "intrinsics": K,
     }
@@ -66,4 +74,13 @@ def test_BAProblem_constructor(factor_graph_data, image_size, keyframes, edges):
     assert ba_problem.src_nodes.shape == torch.Size([n_e])
     assert ba_problem.dst_nodes.shape == torch.Size([n_e])
 
-    assert ba_problem.edge_node_i
+    assert ba_problem.calibration.shape == torch.Size([4])
+    assert ba_problem.calibration_gtsam.shape == (5,)
+    assert ba_problem.predicted_pixels.shape == torch.Size(
+        [n_e, image_size[0], image_size[1], 2]
+    )
+
+
+def test_load_data_from_file(pkl_file_path):
+    factor_graph_data = FactorGraphData.load_from_pickle_file(pkl_file_path)
+    ba_problem = BAProblem(factor_graph_data)
