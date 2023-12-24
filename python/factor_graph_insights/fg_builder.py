@@ -40,10 +40,34 @@ class DataConverter:
         """
         if isinstance(pose, torch.Tensor):
             pose = pose.numpy()
-        assert pose.shape == (7,), "Pose is not 7x1 numpy array"
+        assert pose.shape == (7,), "Pose is not 7x1 numpy array, size = {pose.shape}"
         translation = pose[:3]
         rotation = gtsam.Rot3(w=pose[6], x=pose[3], y=pose[4], z=pose[5])
         return gtsam.Pose3(r=rotation, t=translation)
+
+    @staticmethod
+    def to_pose_with_quaternion(gtsam_pose: gtsam.Pose3) -> np.ndarray:
+        pose = np.zeros(7)
+        t = gtsam_pose.translation()
+        q = gtsam_pose.rotation().toQuaternion()
+        pose[0] = t[0]
+        pose[1] = t[1]
+        pose[2] = t[2]
+        pose[3] = q.x()
+        pose[4] = q.y()
+        pose[5] = q.z()
+        pose[6] = q.w()
+        return pose
+
+    @staticmethod
+    def invert_pose(pose: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+        if isinstance(pose, torch.Tensor):
+            pose = pose.numpy()
+        inv_pose = torch.zeros(7)
+        gtsam_pose = DataConverter.to_gtsam_pose(pose)
+        gtsam_inv_pose = gtsam_pose.inverse()
+        inv_pose = DataConverter.to_pose_with_quaternion(gtsam_inv_pose)
+        return inv_pose
 
 
 class FactorGraphBuilder:
@@ -113,8 +137,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         assert self._cal3s2_camera is not None, "Calibration parameters are not set"
         return self._cal3s2_camera
 
-    def set_calibration(self, calibration: torch.Tensor) -> Self:
-        self._K = calibration.numpy()
+    def set_calibration(self, calibration: Union[torch.Tensor, np.ndarray]) -> Self:
+        if isinstance(calibration, torch.Tensor):
+            self._K = calibration.numpy()
+        self._K = calibration
         self._cal3s2_camera = gtsam.Cal3_S2(
             self._K[0],
             self._K[1],
@@ -131,8 +157,16 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
 
         return self._pose_i, self._pose_j
 
-    def set_poses_and_cameras(self, pose_i: torch.Tensor, pose_j: torch.Tensor) -> Self:
+    def set_poses_and_cameras(
+        self,
+        pose_i: Union[torch.Tensor, np.ndarray],
+        pose_j: Union[torch.Tensor, np.ndarray],
+    ) -> Self:
         """ """
+        if isinstance(pose_i, np.ndarray):
+            pose_i = torch.tensor(pose_i)
+        if isinstance(pose_j, np.ndarray):
+            pose_j = torch.tensor(pose_j)
 
         self._pose_i = pose_i
         self._pose_j = pose_j

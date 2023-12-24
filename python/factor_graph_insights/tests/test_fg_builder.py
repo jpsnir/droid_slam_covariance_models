@@ -91,6 +91,10 @@ def test_data_converter():
     assert_allclose(p, pose_gtsam.translation())
     assert_allclose(q, pose_gtsam.rotation().toQuaternion().coeffs())
 
+    pose_inverse_expected = np.concatenate((-p, q))
+    pose_inverse_computed = DataConverter.invert_pose(pose)
+    assert_allclose(pose_inverse_computed, pose_inverse_expected)
+
 
 def test_factor_graph_builder_construction(fg_builder, input_data):
     """Test the factor graph builder class"""

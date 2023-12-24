@@ -2,6 +2,8 @@ import pytest
 from factor_graph_insights.ba_problem import BAProblem, FactorGraphData
 import torch
 from pathlib import Path
+import numpy as np
+from numpy.testing import assert_allclose
 
 
 @pytest.fixture
@@ -24,7 +26,7 @@ def image_size():
 
 @pytest.fixture
 def pkl_file_path():
-    return Path("./tests/fg_data.pkl")
+    return Path("./tests/data/fg_data.pkl")
 
 
 @pytest.fixture
@@ -38,7 +40,7 @@ def factor_graph_data(keyframes, edges, image_size):
     # define disparity for each keyframe, here 3x3 is the image size
     disps = torch.zeros([n_kf, ROWS, COLS])
     # confidence weights with normal distribution for edges
-    c_map = torch.randn([2, n_e, ROWS, COLS])
+    c_map = torch.randn([n_e, 2, ROWS, COLS])
     predicted = torch.zeros([n_e, ROWS, COLS, 2])
     # define the node i of i -j edge
     # unidirectional
@@ -68,7 +70,7 @@ def test_BAProblem_constructor(factor_graph_data, image_size, keyframes, edges):
         [n_kf, image_size[0], image_size[1]]
     )
     assert ba_problem.confidence_map.shape == torch.Size(
-        [2, n_e, image_size[0], image_size[1]]
+        [n_e, 2, image_size[0], image_size[1]]
     )
 
     assert ba_problem.src_nodes.shape == torch.Size([n_e])
@@ -76,6 +78,7 @@ def test_BAProblem_constructor(factor_graph_data, image_size, keyframes, edges):
 
     assert ba_problem.calibration.shape == torch.Size([4])
     assert ba_problem.calibration_gtsam.shape == (5,)
+    assert_allclose(ba_problem.calibration_gtsam, np.array([50, 50, 0, 50, 50]))
     assert ba_problem.predicted_pixels.shape == torch.Size(
         [n_e, image_size[0], image_size[1], 2]
     )
@@ -84,3 +87,23 @@ def test_BAProblem_constructor(factor_graph_data, image_size, keyframes, edges):
 def test_load_data_from_file(pkl_file_path):
     factor_graph_data = FactorGraphData.load_from_pickle_file(pkl_file_path)
     ba_problem = BAProblem(factor_graph_data)
+    # check assumptions about shapes.
+    n_kf = ba_problem.keyframes
+    n_e = ba_problem.edges
+    image_size = ba_problem.image_size
+    assert image_size == (49, 61)
+    assert ba_problem.poses.shape == torch.Size([n_kf, 7])
+    assert ba_problem.confidence_map.shape == torch.Size(
+        [n_e, 2, image_size[0], image_size[1]]
+    )
+    assert ba_problem.src_nodes.shape == torch.Size([n_e])
+    assert ba_problem.calibration.shape == torch.Size([4])
+    assert ba_problem.calibration_gtsam.shape == (5,)
+    assert ba_problem.predicted_pixels.shape == torch.Size(
+        [n_e, 2, image_size[0], image_size[1]]
+    )
+
+
+def test_build_graph(factor_graph_data):
+    ba_problem = BAProblem(factor_graph_data)
+    graph = ba_problem.build_graph()

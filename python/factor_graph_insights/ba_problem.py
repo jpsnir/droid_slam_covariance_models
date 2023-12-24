@@ -8,9 +8,14 @@ from typing import (
     Union,
     List,
     Dict,
+    Tuple,
 )
+import gtsam
 import torch
 import numpy as np
+from factor_graph_insights.fg_builder import ImagePairFactorGraphBuilder
+from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
+from factor_graph_insights.fg_builder import DataConverter
 
 
 class FactorGraphData:
@@ -91,6 +96,21 @@ class BAProblem:
         self._predicted = factor_graph_data["predicted"]
 
     @property
+    def keyframes(self) -> int:
+        n_kf, _ = self._poses.shape
+        return n_kf
+
+    @property
+    def edges(self) -> int:
+        n_e = self._ii.shape
+        return n_e[0]
+
+    @property
+    def image_size(self) -> Tuple[int, int]:
+        n, ROWS, COLS = self._depths.shape
+        return (ROWS, COLS)
+
+    @property
     def poses(self) -> torch.Tensor:
         return self._poses
 
@@ -125,6 +145,27 @@ class BAProblem:
     def _convert_to_gtsam_K(self):
         k = self._K.numpy()
         self._gtsam_kvec = np.array([k[0], k[1], 0, k[2], k[3]])
+
+    def build_graph(self) -> gtsam.NonlinearFactorGraph:
+        """
+        builds a factor graph from complete factor graph data
+        """
+        image_size = self.image_size
+        for edge_id, (node_i, node_j) in enumerate(zip(self._ii, self._jj)):
+            fg_builder = ImagePairFactorGraphBuilder(node_i, node_j, image_size)
+            pose_cam_i_w = self._poses[node_i]
+            pose_cam_j_w = self._poses[node_j]
+            pose_w_cam_i = DataConverter.invert_pose(pose_cam_i_w)
+            pose_w_cam_j = DataConverter.invert_pose(pose_cam_j_w)
+            fg_builder = (
+                fg_builder.set_calibration(self.calibration_gtsam)
+                .set_depths(self._depths[node_i])
+                .set_poses_and_cameras(pose_w_cam_i, pose_w_cam_j)
+                .set_pixel_weights(self._c_map[edge_id])
+                .set_target_pts(self._predicted[edge_id])
+            )
+            dba_error = Droid_DBA_Error(self._gtsam_kvec)
+            fg_builder.error_model = dba_error
 
 
 # def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
