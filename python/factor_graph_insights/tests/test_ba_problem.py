@@ -3,6 +3,7 @@ from factor_graph_insights.ba_problem import BAProblem, FactorGraphData
 import torch
 from pathlib import Path
 import numpy as np
+import gtsam
 from numpy.testing import assert_allclose
 
 
@@ -104,6 +105,24 @@ def test_load_data_from_file(pkl_file_path):
     )
 
 
-def test_build_graph(factor_graph_data):
+def test_build_graph_attributes(factor_graph_data):
     ba_problem = BAProblem(factor_graph_data)
-    graph = ba_problem.build_graph()
+    graph = ba_problem.build_factor_graph()
+    n_e = ba_problem.edges
+    n_kf = ba_problem.keyframes
+    image_size = ba_problem.image_size
+
+    assert graph.nrFactors() == n_e * image_size[0] * image_size[1]
+    keys = graph.keyVector()
+    for i in range(0, n_kf):
+        pose_key = gtsam.symbol("x", i)
+        assert pose_key in keys, f"{pose_key} - x - {i} is absent in graph keys "
+        counter = 0
+        for row in range(0, image_size[0]):
+            for col in range(0, image_size[1]):
+                depth_key = gtsam.symbol(
+                    "d", i * image_size[0] * image_size[1] + counter
+                )
+                assert (
+                    depth_key in keys
+                ), f"depth {row},{col} for image {i} is absent in graph keys"

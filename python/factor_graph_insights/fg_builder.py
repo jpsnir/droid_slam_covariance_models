@@ -269,6 +269,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         assert (callable(error_model.error), "error attribute is not callable")
         self._error_model = error_model
 
+    def set_error_model(self, error_model: object) -> Self:
+        self.error_model = error_model
+        return self
+
     @property
     def factor_graph(self) -> gtsam.NonlinearFactorGraph:
         assert self._graph is not None, "Factor graph is not defined"

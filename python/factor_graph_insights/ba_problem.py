@@ -73,13 +73,12 @@ class BAProblem:
             assert (
                 r_key in factor_graph_data.keys()
             ), f"Cannot initialize the BA problem. Dictionary Key {r_key} is missing"
+        # check keys
         assert (
-            "ii",
-            factor_graph_data["graph_data"],
+            "ii" in factor_graph_data["graph_data"].keys()
         ), "Cannot initialize BA problem, src (ii) nodes data does not exist in graph data"
         assert (
-            "jj",
-            factor_graph_data["graph_data"],
+            "jj" in factor_graph_data["graph_data"].keys()
         ), "Cannot initialize BA problem, dst (jj) nodes data does not exist in graph data"
         assert (
             factor_graph_data["graph_data"]["ii"].shape
@@ -142,30 +141,40 @@ class BAProblem:
     def predicted_pixels(self) -> np.ndarray:
         return self._predicted
 
+    @property
+    def factor_graph(self) -> gtsam.NonlinearFactorGraph:
+        assert (
+            self._graph is not None
+        ), " Graph is not yet constructed, build it from the data first"
+        return self._graph
+
     def _convert_to_gtsam_K(self):
         k = self._K.numpy()
         self._gtsam_kvec = np.array([k[0], k[1], 0, k[2], k[3]])
 
-    def build_graph(self) -> gtsam.NonlinearFactorGraph:
+    def build_factor_graph(self) -> gtsam.NonlinearFactorGraph:
         """
         builds a factor graph from complete factor graph data
         """
         image_size = self.image_size
+        self._graph = gtsam.NonlinearFactorGraph()
         for edge_id, (node_i, node_j) in enumerate(zip(self._ii, self._jj)):
-            fg_builder = ImagePairFactorGraphBuilder(node_i, node_j, image_size)
             pose_cam_i_w = self._poses[node_i]
             pose_cam_j_w = self._poses[node_j]
             pose_w_cam_i = DataConverter.invert_pose(pose_cam_i_w)
             pose_w_cam_j = DataConverter.invert_pose(pose_cam_j_w)
             fg_builder = (
-                fg_builder.set_calibration(self.calibration_gtsam)
+                ImagePairFactorGraphBuilder(node_i, node_j, image_size)
+                .set_calibration(self.calibration_gtsam)
                 .set_depths(self._depths[node_i])
                 .set_poses_and_cameras(pose_w_cam_i, pose_w_cam_j)
                 .set_pixel_weights(self._c_map[edge_id])
                 .set_target_pts(self._predicted[edge_id])
+                .set_error_model(Droid_DBA_Error(self._gtsam_kvec))
             )
-            dba_error = Droid_DBA_Error(self._gtsam_kvec)
-            fg_builder.error_model = dba_error
+            graph = fg_builder.build_factor_graph()
+            self._graph.push_back(graph)
+        return self._graph
 
 
 # def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
