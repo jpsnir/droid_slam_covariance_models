@@ -31,6 +31,28 @@ def pkl_file_path():
 
 
 @pytest.fixture
+def prior_noise_model():
+    prior_rpy_sigma = 1
+    # 3D translational standard deviation of of prior factor - gaussian model
+    # (meters)
+    prior_xyz_sigma = 0.05
+    sigma_angle = np.deg2rad(prior_rpy_sigma)
+    prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
+        np.array(
+            [
+                sigma_angle,
+                sigma_angle,
+                sigma_angle,
+                prior_xyz_sigma,
+                prior_xyz_sigma,
+                prior_xyz_sigma,
+            ]
+        )
+    )
+    return prior_noise_model
+
+
+@pytest.fixture
 def factor_graph_data(keyframes, edges, image_size):
     # define poses for 4 keyframes - 4x7
     n_kf = keyframes
@@ -105,14 +127,16 @@ def test_load_data_from_file(pkl_file_path):
     )
 
 
-def test_build_graph_attributes(factor_graph_data):
+def test_build_graph_attributes(factor_graph_data, prior_noise_model):
     ba_problem = BAProblem(factor_graph_data)
-    graph = ba_problem.build_factor_graph()
+
+    graph = ba_problem.build_visual_factor_graph(prior_noise_model)
     n_e = ba_problem.edges
     n_kf = ba_problem.keyframes
     image_size = ba_problem.image_size
-
-    assert graph.nrFactors() == n_e * image_size[0] * image_size[1]
+    N_prior = 2
+    expected_nrFactors = n_e * image_size[0] * image_size[1] + N_prior
+    assert graph.nrFactors() == expected_nrFactors
     keys = graph.keyVector()
     for i in range(0, n_kf):
         pose_key = gtsam.symbol("x", i)

@@ -152,12 +152,43 @@ class BAProblem:
         k = self._K.numpy()
         self._gtsam_kvec = np.array([k[0], k[1], 0, k[2], k[3]])
 
-    def build_factor_graph(self) -> gtsam.NonlinearFactorGraph:
+    @property
+    def initial_values(self) -> gtsam.Values:
+        return self._init_values
+
+    def _add_pose_priors(
+        self,
+        graph: gtsam.NonlinearFactorGraph,
+        symbols: List,
+        prior_poses: np.ndarray,
+        prior_noise_models: List,
+    ) -> gtsam.NonlinearFactorGraph:
+        """"""
+
+        for i in range(0, len(symbols)):
+            symbol = symbols[i]
+            prior_noise_model = prior_noise_models[i]
+            gtsam_pose = DataConverter.to_gtsam_pose(prior_poses[i])
+            graph.addPriorPose3(symbol, gtsam_pose, prior_noise_model)
+
+    def build_visual_factor_graph(
+        self, prior_noise_model: gtsam.noiseModel, N_prior: int = 2
+    ) -> gtsam.NonlinearFactorGraph:
         """
         builds a factor graph from complete factor graph data
+        N_prior : poses that will be assigned prior, default 2
         """
         image_size = self.image_size
         self._graph = gtsam.NonlinearFactorGraph()
+        prior_nm = [prior_noise_model] * N_prior
+        symbols = [gtsam.symbol("x", 0), gtsam.symbol("x", 1)]
+        prior_poses = self._poses[:N_prior]
+        self._add_pose_priors(
+            self._graph,
+            symbols=symbols,
+            prior_poses=prior_poses,
+            prior_noise_models=prior_nm,
+        )
         for edge_id, (node_i, node_j) in enumerate(zip(self._ii, self._jj)):
             pose_cam_i_w = self._poses[node_i]
             pose_cam_j_w = self._poses[node_j]
