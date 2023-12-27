@@ -129,11 +129,12 @@ def test_load_data_from_file(pkl_file_path):
 
 def test_build_graph_attributes(factor_graph_data, prior_noise_model):
     ba_problem = BAProblem(factor_graph_data)
-
-    graph = ba_problem.build_visual_factor_graph(prior_noise_model)
     n_e = ba_problem.edges
     n_kf = ba_problem.keyframes
     image_size = ba_problem.image_size
+
+    graph = ba_problem.build_visual_factor_graph(prior_noise_model, N_edges=n_e)
+
     N_prior = 2
     expected_nrFactors = n_e * image_size[0] * image_size[1] + N_prior
     assert graph.nrFactors() == expected_nrFactors

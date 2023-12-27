@@ -93,6 +93,7 @@ class BAProblem:
         self._K = factor_graph_data["intrinsics"]
         self._convert_to_gtsam_K()
         self._predicted = factor_graph_data["predicted"]
+        self._init_values = gtsam.Values()
 
     @property
     def keyframes(self) -> int:
@@ -153,7 +154,7 @@ class BAProblem:
         self._gtsam_kvec = np.array([k[0], k[1], 0, k[2], k[3]])
 
     @property
-    def initial_values(self) -> gtsam.Values:
+    def i_vals(self) -> gtsam.Values:
         return self._init_values
 
     def _add_pose_priors(
@@ -172,7 +173,7 @@ class BAProblem:
             graph.addPriorPose3(symbol, gtsam_pose, prior_noise_model)
 
     def build_visual_factor_graph(
-        self, prior_noise_model: gtsam.noiseModel, N_prior: int = 2
+        self, prior_noise_model: gtsam.noiseModel, N_prior: int = 2, N_edges=5
     ) -> gtsam.NonlinearFactorGraph:
         """
         builds a factor graph from complete factor graph data
@@ -189,7 +190,9 @@ class BAProblem:
             prior_poses=prior_poses,
             prior_noise_models=prior_nm,
         )
-        for edge_id, (node_i, node_j) in enumerate(zip(self._ii, self._jj)):
+        for edge_id, (node_i, node_j) in enumerate(
+            zip(self._ii[:N_edges], self._jj[:N_edges])
+        ):
             pose_cam_i_w = self._poses[node_i]
             pose_cam_j_w = self._poses[node_j]
             pose_w_cam_i = DataConverter.invert_pose(pose_cam_i_w)
@@ -203,7 +206,9 @@ class BAProblem:
                 .set_target_pts(self._predicted[edge_id])
                 .set_error_model(Droid_DBA_Error(self._gtsam_kvec))
             )
-            graph = fg_builder.build_factor_graph()
+            graph = fg_builder.build_factor_graph(self.i_vals)
+            updated_i_vals = fg_builder.init_values_image_pair
+            self._init_values = updated_i_vals
             self._graph.push_back(graph)
         return self._graph
 

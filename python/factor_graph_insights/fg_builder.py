@@ -28,8 +28,6 @@ import time
 
 # confidence map values will go here.
 
-init_values = gtsam.Values()
-
 
 class DataConverter:
     @staticmethod
@@ -102,6 +100,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         self._gtsam_pose_j = None
         self._graph = None
         self._error_model = None
+        self._init_values = gtsam.Values()
 
     @property
     def src_img_id(self) -> int:
@@ -274,6 +273,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         return self
 
     @property
+    def init_values_image_pair(self) -> gtsam.Values:
+        return self._init_values
+
+    @property
     def factor_graph(self) -> gtsam.NonlinearFactorGraph:
         assert self._graph is not None, "Factor graph is not defined"
         return self._graph
@@ -301,15 +304,31 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         is_near = depth_j < near_depth_threshold
         return depth_j, is_near
 
-    def build_factor_graph(self, confidence_factor=0.001) -> gtsam.NonlinearFactorGraph:
+    def _set_init_poses(self, symbols: Tuple[int, int]):
+        if not self._init_values.exists(symbols[0]):
+            self._init_values.insert(symbols[0], self._gtsam_pose_i)
+
+        if not self._init_values.exists(symbols[1]):
+            self._init_values.insert(symbols[1], self._gtsam_pose_j)
+
+    def _set_init_depth(self, symbol, depth):
+        if not self._init_values.exists(symbol):
+            self._init_values.insert(symbol, depth)
+
+    def build_factor_graph(
+        self, cur_init_vals=gtsam.Values(), confidence_factor=0.001
+    ) -> gtsam.NonlinearFactorGraph:
         """
         overrides base class
         build a non-linear factor graph
         """
         graph = gtsam.NonlinearFactorGraph()
+        self._init_values = cur_init_vals
+
         ROWS, COLS = self._image_size
         s_x_i = gtsam.symbol("x", self.i)
         s_x_j = gtsam.symbol("x", self.j)
+        self._set_init_poses((s_x_i, s_x_j))
         count_symbol = 0
         for row in range(ROWS):
             for col in range(COLS):
@@ -318,9 +337,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
                 depth_j, is_close = self.depth_to_cam_j((row, col), 0.25)
                 s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
                 self._symbols = (s_x_i, s_x_j, s_d_i)
-                # if not init_values.exists(symbol_di):
-                #     init_values.insert(symbol_di, depth[row, col].numpy())
-
+                self._set_init_depth(s_d_i, depth_j)
                 # define noise for each pixel from confidence map or weight
                 # matrix
                 if is_close:
