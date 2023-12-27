@@ -64,7 +64,7 @@ def factor_graph_data(keyframes, edges, image_size):
     disps = torch.zeros([n_kf, ROWS, COLS])
     # confidence weights with normal distribution for edges
     c_map = torch.randn([n_e, 2, ROWS, COLS])
-    predicted = torch.zeros([n_e, ROWS, COLS, 2])
+    predicted = torch.zeros([n_e, 2, ROWS, COLS])
     # define the node i of i -j edge
     # unidirectional
     ii = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
@@ -103,7 +103,7 @@ def test_BAProblem_constructor(factor_graph_data, image_size, keyframes, edges):
     assert ba_problem.calibration_gtsam.shape == (5,)
     assert_allclose(ba_problem.calibration_gtsam, np.array([50, 50, 0, 50, 50]))
     assert ba_problem.predicted_pixels.shape == torch.Size(
-        [n_e, image_size[0], image_size[1], 2]
+        [n_e, 2, image_size[0], image_size[1]]
     )
 
 

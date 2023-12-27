@@ -18,9 +18,9 @@ def input_data():
     errors_expected = [gtsam.Point2(5, 5), gtsam.Point2(12, -10), gtsam.Point2(23, 32)]
     depths = torch.tensor([1, 1, 1]).reshape(1, 3)
     weights = torch.tensor([[[0.9, 0.8, 0.8]], [[0.8, 0.6, 0.7]]])
-    target_pt = torch.tensor(
-        [[18.3333, 51.6667], [38, 60], [13.6667, 11.3333]]
-    ).reshape(1, 3, 2)
+    target_pt = torch.tensor([[18.3333, 38, 13.6667], [51.6667, 60, 11.3333]]).reshape(
+        2, 1, 3
+    )
     intrinsics = torch.tensor([50, 50, 0, 50, 50])
     quat_w_cam = gtsam.Rot3.RzRyRx(-np.pi / 2, 0, -np.pi / 2).toQuaternion().coeffs()
     p_w_cam_i = np.array([2, 1, 0])
@@ -103,7 +103,7 @@ def test_factor_graph_builder_construction(fg_builder, input_data):
     assert fg_builder.src_img_id == 0
     assert fg_builder.image_size == (1, 3)
     assert fg_builder.pixel_weights.shape == torch.Size([2, 1, 3])
-    assert fg_builder.target_pts.shape == torch.Size([1, 3, 2])
+    assert fg_builder.target_pts.shape == torch.Size([2, 1, 3])
     assert fg_builder.depths.shape == torch.Size([1, 3])
     assert torch.equal(fg_builder.pixel_weights, input_data["weights"])
     assert torch.equal(fg_builder.calibration, input_data["intrinsics"])
@@ -239,7 +239,7 @@ def test_graph_factors(fg_builder):
     k_vec = fg_builder.calibration.numpy()
     dba_error = Droid_DBA_Error(k_vec)
     dba_error.pixel_to_project = np.array([0, 0])
-    dba_error.predicted_pixel = fg_builder.target_pts[0, 0].numpy()
+    dba_error.predicted_pixel = fg_builder.target_pts[:, 0, 0].numpy()
     actual_error, J = dba_error.error(
         pose_gtsam_i, pose_gtsam_j, fg_builder.depthAt([0, 0])
     )
@@ -247,7 +247,7 @@ def test_graph_factors(fg_builder):
 
     ## Jacobian
     dba_error.pixel_to_project = np.array([0, 1])
-    dba_error.predicted_pixel = fg_builder.target_pts[0, 1].numpy()
+    dba_error.predicted_pixel = fg_builder.target_pts[:, 0, 1].numpy()
 
     depth_j, is_close = fg_builder.depth_to_cam_j((0, 1), 0.25)
     assert is_close == False

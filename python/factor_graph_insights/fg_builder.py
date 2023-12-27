@@ -332,7 +332,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
                 ## Add factor
                 assert pixel_confidence.shape == (2,)
                 pixel_to_project = np.array([row, col])
-                predicted_pixel = self._target_pts[row, col].numpy()
+                predicted_pixel = self._target_pts[:, row, col].numpy()
                 pixels = (pixel_to_project, predicted_pixel)
                 vars = (self._gtsam_pose_i, self._gtsam_pose_j, self._depths[row, col])
                 self.error_model.make_custom_factor(
