@@ -28,6 +28,8 @@ import time
 
 # confidence map values will go here.
 
+NEAR_DEPTH_THRESHOLD = 0.25
+
 
 class DataConverter:
     @staticmethod
@@ -334,31 +336,33 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             for col in range(COLS):
                 # each depth in ith camera has to be assigned a symbol
                 # as it will be optimized as a variable.
-                depth_j, is_close = self.depth_to_cam_j((row, col), 0.25)
-                s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
-                self._symbols = (s_x_i, s_x_j, s_d_i)
-                self._set_init_depth(s_d_i, depth_j)
-                # define noise for each pixel from confidence map or weight
-                # matrix
-                if is_close:
-                    pixel_confidence = np.array([0, 0])
-                else:
+                depth_j, is_close = self.depth_to_cam_j(
+                    (row, col), NEAR_DEPTH_THRESHOLD
+                )
+                if not is_close:
+                    s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
+                    self._symbols = (s_x_i, s_x_j, s_d_i)
+                    self._set_init_depth(s_d_i, depth_j)
                     pixel_confidence = (
                         confidence_factor * self._weights[:, row, col].numpy()
                     )
-                ## Add factor
-                assert pixel_confidence.shape == (2,)
-                pixel_to_project = np.array([row, col])
-                predicted_pixel = self._target_pts[:, row, col].numpy()
-                pixels = (pixel_to_project, predicted_pixel)
-                vars = (self._gtsam_pose_i, self._gtsam_pose_j, self._depths[row, col])
-                self.error_model.make_custom_factor(
-                    self._symbols,
-                    pixels,
-                    pixel_confidence,
-                )
-                graph.add(self._error_model.custom_factor)
-                count_symbol += 1
+                    ## Add factor
+                    assert pixel_confidence.shape == (2,)
+                    pixel_to_project = np.array([row, col])
+                    predicted_pixel = self._target_pts[:, row, col].numpy()
+                    pixels = (pixel_to_project, predicted_pixel)
+                    vars = (
+                        self._gtsam_pose_i,
+                        self._gtsam_pose_j,
+                        self._depths[row, col],
+                    )
+                    self.error_model.make_custom_factor(
+                        self._symbols,
+                        pixels,
+                        pixel_confidence,
+                    )
+                    graph.add(self._error_model.custom_factor)
+                    count_symbol += 1
         return graph
 
 

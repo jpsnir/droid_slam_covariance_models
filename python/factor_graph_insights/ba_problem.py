@@ -172,6 +172,9 @@ class BAProblem:
             gtsam_pose = DataConverter.to_gtsam_pose(prior_poses[i])
             graph.addPriorPose3(symbol, gtsam_pose, prior_noise_model)
 
+    # TODO: separate the prior factor logic completely and add more parameters and conditions to
+    #      add prior factors
+    # TODO: Incremental bundle adjustment : how can we do it, what is the theory behind it? Simplest example to test it and build the incremental
     def build_visual_factor_graph(
         self, prior_noise_model: gtsam.noiseModel, N_prior: int = 2, N_edges=5
     ) -> gtsam.NonlinearFactorGraph:

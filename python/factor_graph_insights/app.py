@@ -51,9 +51,14 @@ if __name__ == "__main__":
     )
     fg_data = FactorGraphData.load_from_pickle_file(fg_file)
     ba_problem = BAProblem(fg_data)
-    graph = ba_problem.build_visual_factor_graph(prior_noise_model)
+    graph = ba_problem.build_visual_factor_graph(
+        prior_noise_model, N_edges=ba_problem.edges
+    )
     init_vals = ba_problem.i_vals
     analyzer = GraphAnalysis(graph)
 
-    info, marginals = analyzer.marginals(init_vals)
-    print(f" Rank of matrix {np.linalg.matrix_rank(info)}")
+    marginals = analyzer.marginals(init_vals)
+    for i in range(0, len(ba_problem.poses)):
+        cov = marginals.marginalCovariance(gtsam.symbol("x", i))
+        print(f" marginal covariance = {cov}")
+    # print(f" Rank of matrix {np.linalg.matrix_rank(info)}")
