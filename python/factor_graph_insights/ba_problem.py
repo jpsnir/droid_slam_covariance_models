@@ -187,10 +187,14 @@ class BAProblem:
         prior_nm = [prior_noise_model] * N_prior
         symbols = [gtsam.symbol("x", 0), gtsam.symbol("x", 1)]
         prior_poses = self._poses[:N_prior]
+        prior_poses_inverted = np.zeros(prior_poses.shape)
+        for i, p in enumerate(prior_poses):
+            prior_poses_inverted[i] = DataConverter.invert_pose(p)
+
         self._add_pose_priors(
             self._graph,
             symbols=symbols,
-            prior_poses=prior_poses,
+            prior_poses=prior_poses_inverted,
             prior_noise_models=prior_nm,
         )
         for edge_id, (node_i, node_j) in enumerate(
