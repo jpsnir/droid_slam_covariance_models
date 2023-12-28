@@ -192,7 +192,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         """make pinhole camera objects from poses and intrinsics"""
         assert (
             self._cal3s2_camera is not None
-        ), "set cal2s2 camera object for  creating pinhole cameras"
+        ), "set cal3s2 camera object for  creating pinhole cameras"
 
         assert self._pose_i is not None, " Pose i is not set"
         assert self._pose_j is not None, " Pose j is not set"
