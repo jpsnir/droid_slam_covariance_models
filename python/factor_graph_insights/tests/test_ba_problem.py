@@ -133,10 +133,10 @@ def test_build_graph_attributes(factor_graph_data, prior_noise_model):
     n_kf = ba_problem.keyframes
     image_size = ba_problem.image_size
 
-    graph = ba_problem.build_visual_factor_graph(prior_noise_model, N_edges=n_e)
+    graph = ba_problem.build_visual_factor_graph(N_edges=n_e)
 
     N_prior = 2
-    expected_nrFactors = n_e * image_size[0] * image_size[1] + N_prior
+    expected_nrFactors = n_e * image_size[0] * image_size[1]
     assert graph.nrFactors() == expected_nrFactors
     keys = graph.keyVector()
     for i in range(0, n_kf):
@@ -151,3 +151,7 @@ def test_build_graph_attributes(factor_graph_data, prior_noise_model):
                 assert (
                     depth_key in keys
                 ), f"depth {row},{col} for image {i} is absent in graph keys"
+
+
+def test_build_priors():
+    """"""

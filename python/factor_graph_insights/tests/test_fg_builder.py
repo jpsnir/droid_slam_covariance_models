@@ -150,11 +150,11 @@ def test_factor_graph_builder_point_depth_check(fg_builder, input_data):
         pose_i=p_i,
         pose_j=p_j_2,
     )
-    depth_j, flag_is_close = fg_builder.depth_to_cam_j(
+    depth_j, (flag_i, flag_j) = fg_builder.depth_to_cam_j(
         input_data["pixels_i"][0], 1, 0.25
     )
     assert_allclose(depth_j, 0.2)
-    assert flag_is_close == True
+    assert flag_j == True
 
 
 def test_build_factor_graph(fg_builder, input_data):
@@ -249,8 +249,9 @@ def test_graph_factors(fg_builder):
     dba_error.pixel_to_project = np.array([0, 1])
     dba_error.predicted_pixel = fg_builder.target_pts[:, 0, 1].numpy()
 
-    depth_j, is_close = fg_builder.depth_to_cam_j((0, 1), 0.25)
-    assert is_close == False
+    depth_j, (is_close_i, is_close_j) = fg_builder.depth_to_cam_j((0, 1), 0.25)
+    assert is_close_j == False
+    assert is_close_i == False
     actual_error, J = dba_error.error(
         pose_gtsam_i, pose_gtsam_j, fg_builder.depthAt([0, 1])
     )

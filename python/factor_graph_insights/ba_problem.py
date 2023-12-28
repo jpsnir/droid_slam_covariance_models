@@ -94,6 +94,7 @@ class BAProblem:
         self._convert_to_gtsam_K()
         self._predicted = factor_graph_data["predicted"]
         self._init_values = gtsam.Values()
+        self._graph = None
 
     @property
     def keyframes(self) -> int:
@@ -174,25 +175,61 @@ class BAProblem:
 
     # TODO: separate the prior factor logic completely and add more parameters and conditions to
     #      add prior factors
-    # TODO: Incremental bundle adjustment : how can we do it, what is the theory behind it? Simplest example to test it and build the incremental
-    def build_visual_factor_graph(
-        self, prior_noise_model: gtsam.noiseModel, N_prior: int = 2, N_edges=5
-    ) -> gtsam.NonlinearFactorGraph:
+    def build_priors(self, priors_definition: Dict) -> gtsam.NonlinearFactorGraph:
+        """prior factor in the graph"""
+        # check inputs
+        # TODO: Decorate this type checking code.
+        assert (
+            "prior_pose_symbols" in priors_definition
+        ), " Required key missing, define 'prior_pose_symbols' in dict"
+        assert (
+            "initial_poses" in priors_definition
+        ), "Required key missing, define 'initial_poses' key in dict"
+        assert (
+            "prior_noise_model" in priors_definition
+        ), "Required Key missing, define 'prior_noise_model' key in the dict"
+        assert isinstance(
+            priors_definition["prior_pose_symbols"], (tuple, list)
+        ), " 'prior_pose_symbols must be a tuple of ints"
+        assert isinstance(
+            priors_definition["initial_poses"], np.ndarray
+        ), " 'initial_poses' must be nx7 numpy arrays, each pose being tx, ty, tz, qx, qy, qz, qw"
+        assert isinstance(
+            priors_definition["prior_noise_model"], (list, tuple)
+        ), " 'prior_noise_model' must be a list of gtsam.noiseModel for Pose3"
+        assert (
+            priors_definition["initial_poses"].shape[1] == 7
+        ), " 'initial_poses' must be nx7"
+        assert (
+            len(priors_definition["prior_pose_symbols"])
+            == priors_definition["initial_poses"].shape[0]
+        ), " Number of symbols not equal to number of poses"
+        assert len(priors_definition["prior_noise_model"]) == len(
+            priors_definition["prior_pose_symbols"]
+        ), " Number of noise models not equal to number of pose symbols"
+
+        if self._graph is None:
+            self._graph = gtsam.NonlinearFactorGraph()
+
+        prior_n_models = priors_definition["prior_noise_model"]
+        symbols = priors_definition["prior_pose_symbols"]
+        p_poses = priors_definition["initial_poses"]
+        self._add_pose_priors(
+            graph=self._graph,
+            symbols=symbols,
+            prior_noise_models=prior_n_models,
+            prior_poses=p_poses,
+        )
+
+    def build_visual_factor_graph(self, N_edges=5) -> gtsam.NonlinearFactorGraph:
         """
         builds a factor graph from complete factor graph data
         N_prior : poses that will be assigned prior, default 2
         """
         image_size = self.image_size
-        self._graph = gtsam.NonlinearFactorGraph()
-        prior_nm = [prior_noise_model] * N_prior
-        symbols = [gtsam.symbol("x", 0), gtsam.symbol("x", 1)]
-        prior_poses = self._poses[:N_prior]
-        self._add_pose_priors(
-            self._graph,
-            symbols=symbols,
-            prior_poses=prior_poses,
-            prior_noise_models=prior_nm,
-        )
+        if self._graph is None:
+            self._graph = gtsam.NonlinearFactorGraph()
+
         for edge_id, (node_i, node_j) in enumerate(
             zip(self._ii[:N_edges], self._jj[:N_edges])
         ):
@@ -214,6 +251,11 @@ class BAProblem:
             self._init_values = updated_i_vals
             self._graph.push_back(graph)
         return self._graph
+
+    # TODO: Incremental bundle adjustment : how can we do it, what is the theory behind it? Simplest example
+    #  to test it and build the incremental
+    def build_incremental_visual_factor_graph(self):
+        """"""
 
 
 # def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
