@@ -94,6 +94,8 @@ class BAProblem:
         self._convert_to_gtsam_K()
         self._predicted = factor_graph_data["predicted"]
         self._init_values = gtsam.Values()
+        self._graph = None
+        self._prior_added = False
 
     @property
     def keyframes(self) -> int:
@@ -131,6 +133,10 @@ class BAProblem:
         return self._jj
 
     @property
+    def prior_flag(self) -> bool:
+        return self._prior_added
+
+    @property
     def calibration(self) -> torch.Tensor:
         return self._K
 
@@ -164,7 +170,9 @@ class BAProblem:
         prior_poses: np.ndarray,
         prior_noise_models: List,
     ) -> gtsam.NonlinearFactorGraph:
-        """"""
+        """
+        prior_poses world to camera frame
+        """
 
         for i in range(0, len(symbols)):
             symbol = symbols[i]
@@ -172,31 +180,125 @@ class BAProblem:
             gtsam_pose = DataConverter.to_gtsam_pose(prior_poses[i])
             graph.addPriorPose3(symbol, gtsam_pose, prior_noise_model)
 
-    # TODO: separate the prior factor logic completely and add more parameters and conditions to
-    #      add prior factors
-    # TODO: Incremental bundle adjustment : how can we do it, what is the theory behind it? Simplest example to test it and build the incremental
-    def build_visual_factor_graph(
-        self, prior_noise_model: gtsam.noiseModel, N_prior: int = 2, N_edges=5
-    ) -> gtsam.NonlinearFactorGraph:
+    def set_prior_noise_model(
+        self, prior_rpy_sigma: float = 1, prior_xyz_sigma: float = 0.05
+    ) -> gtsam.noiseModel:
+        """_summary_
+
+        Args:
+            prior_xyz_sigma (float, optional): 3D rotational standard deviation of prior factor - gaussian model  (degrees)
+            prior_rpy_sigma (float, optional): - 3D translational standard deviation of of prior factor - gaussian model (meters)
+
+        Returns:
+            List[gtsam.noiseModel]: _description_
+        """
+        sigma_angle = np.deg2rad(prior_rpy_sigma)
+        prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
+            np.array(
+                [
+                    sigma_angle,
+                    sigma_angle,
+                    sigma_angle,
+                    prior_xyz_sigma,
+                    prior_xyz_sigma,
+                    prior_xyz_sigma,
+                ]
+            )
+        )
+
+        return prior_noise_model
+
+    def set_prior_definition(
+        self,
+        pose_indices: List,
+        prior_noise_models: List = None,
+    ) -> Dict:
+        """creates a dictionary for defining prior poses in the factor graph"""
+        assert (
+            len(pose_indices) >= 2
+        ), " For visual factor graph at least two priors are required"
+
+        # lambda function to create symbols from indices
+        symbols = lambda indices: [gtsam.symbol("x", idx) for idx in indices]
+
+        # set the default prior noise model if not provided
+        if prior_noise_models is None:
+            prior_noise_models = [self.set_prior_noise_model()] * len(pose_indices)
+
+        p_poses_c_w = np.zeros((len(pose_indices), 7))
+        for i, index in enumerate(pose_indices):
+            # assert (
+            #     self.poses[index] == torch.tensor([0, 0, 0, 0, 0, 0, 1])
+            # ).all(), f"{index} - {self.poses[index]}"
+            p_poses_c_w[i, :] = DataConverter.invert_pose(self.poses[index])
+
+        prior_definition = {
+            "prior_pose_symbols": symbols(pose_indices),
+            "initial_poses": p_poses_c_w,
+            "prior_noise_model": prior_noise_models,
+        }
+        return prior_definition
+
+    def add_visual_priors(self, priors_definition: Dict) -> gtsam.NonlinearFactorGraph:
+        """prior factor in the graph"""
+        # check inputs
+        # TODO: Decorate this type checking code.
+        assert (
+            "prior_pose_symbols" in priors_definition
+        ), " Required key missing, define 'prior_pose_symbols' in dict"
+        assert (
+            "initial_poses" in priors_definition
+        ), "Required key missing, define 'initial_poses' key in dict"
+        assert (
+            "prior_noise_model" in priors_definition
+        ), "Required Key missing, define 'prior_noise_model' key in the dict"
+        assert isinstance(
+            priors_definition["prior_pose_symbols"], (tuple, list)
+        ), " 'prior_pose_symbols must be a tuple of ints"
+        assert isinstance(
+            priors_definition["initial_poses"], np.ndarray
+        ), " 'initial_poses' must be nx7 numpy arrays, world to camera frame, the order being: tx, ty, tz, qx, qy, qz, qw"
+        assert isinstance(
+            priors_definition["prior_noise_model"], (list, tuple)
+        ), " 'prior_noise_model' must be a list of gtsam.noiseModel for Pose3"
+        assert (
+            priors_definition["initial_poses"].shape[1] == 7
+        ), " 'initial_poses' must be nx7"
+        assert (
+            len(priors_definition["prior_pose_symbols"])
+            == priors_definition["initial_poses"].shape[0]
+        ), " Number of symbols not equal to number of poses"
+        assert len(priors_definition["prior_noise_model"]) == len(
+            priors_definition["prior_pose_symbols"]
+        ), " Number of noise models not equal to number of pose symbols"
+
+        if self._graph is None:
+            self._graph = gtsam.NonlinearFactorGraph()
+
+        prior_n_models = priors_definition["prior_noise_model"]
+        symbols = priors_definition["prior_pose_symbols"]
+        p_poses_c_w = priors_definition["initial_poses"]
+
+        self._add_pose_priors(
+            graph=self._graph,
+            symbols=symbols,
+            prior_noise_models=prior_n_models,
+            prior_poses=p_poses_c_w,
+        )
+        self._prior_added = True
+
+    def build_visual_factor_graph(self, N_edges=5) -> gtsam.NonlinearFactorGraph:
         """
         builds a factor graph from complete factor graph data
         N_prior : poses that will be assigned prior, default 2
         """
+        assert (
+            self.prior_flag
+        ), "Priors of poses are not set, System may become under-determined. Set them first"
         image_size = self.image_size
-        self._graph = gtsam.NonlinearFactorGraph()
-        prior_nm = [prior_noise_model] * N_prior
-        symbols = [gtsam.symbol("x", 0), gtsam.symbol("x", 1)]
-        prior_poses = self._poses[:N_prior]
-        prior_poses_inverted = np.zeros(prior_poses.shape)
-        for i, p in enumerate(prior_poses):
-            prior_poses_inverted[i] = DataConverter.invert_pose(p)
+        if self._graph is None:
+            self._graph = gtsam.NonlinearFactorGraph()
 
-        self._add_pose_priors(
-            self._graph,
-            symbols=symbols,
-            prior_poses=prior_poses_inverted,
-            prior_noise_models=prior_nm,
-        )
         for edge_id, (node_i, node_j) in enumerate(
             zip(self._ii[:N_edges], self._jj[:N_edges])
         ):
@@ -219,57 +321,7 @@ class BAProblem:
             self._graph.push_back(graph)
         return self._graph
 
-
-# def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
-#     """
-#     build factor graph from complete data
-#     """
-#     graph_data = fg_data["graph_data"]
-#     depth = fg_data["disps"]
-#     poses = fg_data["poses"]
-#     weights = fg_data["c_map"]
-#     predicted = fg_data["predicted"]
-#     K = fg_data["intrinsics"]
-#     ii = graph_data["ii"]
-#     jj = graph_data["jj"]
-#     pair_unique_id = {}
-#     if n == 0:
-#         n = ii.size()[0]
-#     unique_id = 0
-#     full_graph = gtsam.NonlinearFactorGraph()
-#     print(
-#         f"""Graph index - {graph_data['ii'].size()},
-#               poses - {poses.size()},
-#               ---------------------------
-#               weights - shape = {weights.size()},
-#               ---------------------------
-#               predicted - shape = {predicted.size()},
-#               ---------------------------
-#               depth - shape = {depth.size()},
-#               -------------------------------
-#               intrinics - shape = {K.size()}, {K},
-#         """
-#     )
-#     for index, (ix, jx) in enumerate(zip(ii[:n], jj[:n])):
-#         key = (ix, jx)
-#         if key not in pair_unique_id.keys():
-#             pair_unique_id[key] = unique_id
-#             unique_id += 1
-#         if max(ix, jx).item() > poses.size()[0] - 1:
-#             print(f"Ignoring index - {ix , jx} - out of bounds")
-#             continue
-#         print(f"Index - {index} - Adding factors for {ix} - {jx} edge")
-#         graph = factor_graph_image_pair(
-#             i=ix,
-#             j=jx,
-#             pair_id=unique_id,
-#             pose_i=poses[ix],
-#             pose_j=poses[jx],
-#             depth=depth[ix],
-#             weights=weights[index],
-#             target_pt=predicted[index],
-#             intrinsics=K,
-#         )
-#         full_graph.push_back(graph)
-#     print(f"Number of factors in full factor graph = {full_graph.nrFactors()}")
-#     return full_graph
+    # TODO: Incremental bundle adjustment : how can we do it, what is the theory behind it? Simplest example
+    #  to test it and build the incremental
+    def build_incremental_visual_factor_graph(self):
+        """"""

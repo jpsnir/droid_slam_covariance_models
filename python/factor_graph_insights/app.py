@@ -19,6 +19,7 @@ import logging
 from factor_graph_insights.ba_problem import BAProblem, FactorGraphData
 from factor_graph_insights.graph_analysis import GraphAnalysis
 
+
 if __name__ == "__main__":
     N = 5
     fg_dir = Path("/media/jagatpreet/D/datasets/uw_rig/samples").joinpath(
@@ -29,31 +30,12 @@ if __name__ == "__main__":
     print(f"Number of files = {len(files_list)}")
     fg_file = fg_dir.joinpath(files_list[0])
 
-    # Prior noise definition for first two poses.
-    #  3D rotational standard deviation of prior factor - gaussian model
-    #  (degrees)
-    prior_rpy_sigma = 1
-    # 3D translational standard deviation of of prior factor - gaussian model
-    # (meters)
-    prior_xyz_sigma = 0.05
-    sigma_angle = np.deg2rad(prior_rpy_sigma)
-    prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
-        np.array(
-            [
-                sigma_angle,
-                sigma_angle,
-                sigma_angle,
-                prior_xyz_sigma,
-                prior_xyz_sigma,
-                prior_xyz_sigma,
-            ]
-        )
-    )
     fg_data = FactorGraphData.load_from_pickle_file(fg_file)
+
     ba_problem = BAProblem(fg_data)
-    graph = ba_problem.build_visual_factor_graph(
-        prior_noise_model, N_edges=ba_problem.edges
-    )
+    prior_definition = ba_problem.set_prior_definition(pose_indices=[0, 1])
+    ba_problem.add_visual_priors(prior_definition)
+    graph = ba_problem.build_visual_factor_graph(N_edges=ba_problem.edges)
     init_vals = ba_problem.i_vals
     analyzer = GraphAnalysis(graph)
 

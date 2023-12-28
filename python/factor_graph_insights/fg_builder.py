@@ -131,7 +131,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     @property
     def calibration(self) -> torch.Tensor:
         assert self._K is not None, "Calibration parameters are not set"
-        return torch.tensor(self._K)
+        return self._K
 
     @property
     def camera(self) -> gtsam.Cal3_S2:
@@ -192,7 +192,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         """make pinhole camera objects from poses and intrinsics"""
         assert (
             self._cal3s2_camera is not None
-        ), "set cal2s2 camera object for  creating pinhole cameras"
+        ), "set cal3s2 camera object for  creating pinhole cameras"
 
         assert self._pose_i is not None, " Pose i is not set"
         assert self._pose_j is not None, " Pose j is not set"
@@ -215,9 +215,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def set_target_pts(self, target_pts: torch.Tensor) -> Self:
         """"""
         assert (
-            target_pts.shape == self._image_size,
-            " Target point tensor does not match image size",
-        )
+            target_pts.shape[1],
+            target_pts.shape[2],
+        ) == self._image_size, " Target point tensor does not match image size"
+
         self._target_pts = target_pts
         return self
 
@@ -235,9 +236,8 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def set_depths(self, depths: torch.Tensor) -> Self:
         """"""
         assert (
-            depths.shape == self._image_size,
-            " Target depth size does not match image size",
-        )
+            depths.shape == self._image_size
+        ), " Target depth size does not match image size"
         self._depths = depths
         return self
 
@@ -248,9 +248,9 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
 
     def set_pixel_weights(self, weights: torch.Tensor) -> Self:
         assert (
-            weights.shape == self._image_size,
-            f" Target weight size does not match image size",
-        )
+            weights.shape[1],
+            weights.shape[2],
+        ) == self._image_size, f" Target weight {weights.shape} size does not match image size{self._image_size}"
         self._weights = weights
         return self
 
@@ -263,11 +263,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def error_model(self, error_model: object):
         """assigns the custom factor"""
 
-        assert (
-            getattr(error_model, "error"),
-            "No attribute error function in error model",
-        )
-        assert (callable(error_model.error), "error attribute is not callable")
+        assert getattr(
+            error_model, "error"
+        ), "No attribute error function in error model"
+        assert callable(error_model.error), "error attribute is not callable"
         self._error_model = error_model
 
     def set_error_model(self, error_model: object) -> Self:
@@ -303,8 +302,9 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         # convert point to camera j coordinate system from world
         pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
         depth_j = pt3d_j[2]
-        is_near = depth_j < near_depth_threshold
-        return depth_j, is_near
+        is_near_j = depth_j < near_depth_threshold
+        is_near_i = depth_i < near_depth_threshold
+        return depth_j, (is_near_i, is_near_j)
 
     def _set_init_poses(self, symbols: Tuple[int, int]):
         if not self._init_values.exists(symbols[0]):
@@ -336,10 +336,11 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             for col in range(COLS):
                 # each depth in ith camera has to be assigned a symbol
                 # as it will be optimized as a variable.
-                depth_j, is_close = self.depth_to_cam_j(
+                depth_j, (is_close_to_cam_i, is_close_to_cam_j) = self.depth_to_cam_j(
                     (row, col), NEAR_DEPTH_THRESHOLD
                 )
-                if not is_close:
+
+                if not (is_close_to_cam_i or is_close_to_cam_j):
                     s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
                     self._symbols = (s_x_i, s_x_j, s_d_i)
                     self._set_init_depth(s_d_i, depth_j)
