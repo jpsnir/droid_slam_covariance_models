@@ -303,8 +303,9 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         # convert point to camera j coordinate system from world
         pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
         depth_j = pt3d_j[2]
-        is_near = depth_j < near_depth_threshold
-        return depth_j, is_near
+        is_near_j = depth_j < near_depth_threshold
+        is_near_i = depth_i < near_depth_threshold
+        return depth_j, (is_near_i, is_near_j)
 
     def _set_init_poses(self, symbols: Tuple[int, int]):
         if not self._init_values.exists(symbols[0]):
@@ -336,10 +337,11 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             for col in range(COLS):
                 # each depth in ith camera has to be assigned a symbol
                 # as it will be optimized as a variable.
-                depth_j, is_close = self.depth_to_cam_j(
+                depth_j, (is_close_to_cam_i, is_close_to_cam_j) = self.depth_to_cam_j(
                     (row, col), NEAR_DEPTH_THRESHOLD
                 )
-                if not is_close:
+
+                if not (is_close_to_cam_i or is_close_to_cam_j):
                     s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
                     self._symbols = (s_x_i, s_x_j, s_d_i)
                     self._set_init_depth(s_d_i, depth_j)
