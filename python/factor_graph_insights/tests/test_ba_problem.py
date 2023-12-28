@@ -1,5 +1,6 @@
 import pytest
 from factor_graph_insights.ba_problem import BAProblem, FactorGraphData
+from factor_graph_insights.fg_builder import DataConverter
 import torch
 from pathlib import Path
 import numpy as np
@@ -204,5 +205,18 @@ def test_add_visual_priors(prior_noise_models, factor_graph_data):
     )
 
 
-def test_prior_defintions():
+def test_prior_defintions(factor_graph_data, prior_noise_models):
     """"""
+    ba_problem = BAProblem(factor_graph_data)
+    prior_definition = ba_problem.set_prior_definition([0, 1])
+    assert len(prior_definition["prior_pose_symbols"]) == 2
+    assert gtsam.symbol("x", 0) in prior_definition["prior_pose_symbols"]
+    assert gtsam.symbol("x", 1) in prior_definition["prior_pose_symbols"]
+    assert not gtsam.symbol("x", 2) in prior_definition["prior_pose_symbols"]
+
+    assert prior_definition["prior_noise_model"][0].equals(prior_noise_models[0], 1e-5)
+    assert prior_definition["prior_noise_model"][1].equals(prior_noise_models[0], 1e-5)
+    assert_allclose(
+        prior_definition["initial_poses"][0],
+        DataConverter.invert_pose(ba_problem.poses[0]),
+    )

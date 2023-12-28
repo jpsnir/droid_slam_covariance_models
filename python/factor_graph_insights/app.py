@@ -33,8 +33,9 @@ if __name__ == "__main__":
     fg_data = FactorGraphData.load_from_pickle_file(fg_file)
 
     ba_problem = BAProblem(fg_data)
-    ba_problem.set_prior_definition(pose_indices=[0, 1])
-    graph = ba_problem.build_visual_factor_graph(N_edges=10)
+    prior_definition = ba_problem.set_prior_definition(pose_indices=[0, 1])
+    ba_problem.add_visual_priors(prior_definition)
+    graph = ba_problem.build_visual_factor_graph(N_edges=ba_problem.edges)
     init_vals = ba_problem.i_vals
     analyzer = GraphAnalysis(graph)
 

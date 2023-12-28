@@ -95,6 +95,7 @@ class BAProblem:
         self._predicted = factor_graph_data["predicted"]
         self._init_values = gtsam.Values()
         self._graph = None
+        self._prior_added = False
 
     @property
     def keyframes(self) -> int:
@@ -130,6 +131,10 @@ class BAProblem:
     @property
     def dst_nodes(self) -> torch.Tensor:
         return self._jj
+
+    @property
+    def prior_flag(self) -> bool:
+        return self._prior_added
 
     @property
     def calibration(self) -> torch.Tensor:
@@ -220,9 +225,16 @@ class BAProblem:
         if prior_noise_models is None:
             prior_noise_models = [self.set_prior_noise_model()] * len(pose_indices)
 
+        p_poses_c_w = np.zeros((len(pose_indices), 7))
+        for i, index in enumerate(pose_indices):
+            # assert (
+            #     self.poses[index] == torch.tensor([0, 0, 0, 0, 0, 0, 1])
+            # ).all(), f"{index} - {self.poses[index]}"
+            p_poses_c_w[i, :] = DataConverter.invert_pose(self.poses[index])
+
         prior_definition = {
             "prior_pose_symbols": symbols(pose_indices),
-            "initial_poses": self.poses[pose_indices],
+            "initial_poses": p_poses_c_w,
             "prior_noise_model": prior_noise_models,
         }
         return prior_definition
@@ -265,10 +277,7 @@ class BAProblem:
 
         prior_n_models = priors_definition["prior_noise_model"]
         symbols = priors_definition["prior_pose_symbols"]
-        p_poses_w_c = priors_definition["initial_poses"]
-        p_poses_c_w = np.zeros(p_poses_w_c.shape)
-        for i, pose_w_c in enumerate(p_poses_w_c):
-            p_poses_c_w[i] = DataConverter.invert_pose(pose_w_c)
+        p_poses_c_w = priors_definition["initial_poses"]
 
         self._add_pose_priors(
             graph=self._graph,
@@ -276,12 +285,16 @@ class BAProblem:
             prior_noise_models=prior_n_models,
             prior_poses=p_poses_c_w,
         )
+        self._prior_added = True
 
     def build_visual_factor_graph(self, N_edges=5) -> gtsam.NonlinearFactorGraph:
         """
         builds a factor graph from complete factor graph data
         N_prior : poses that will be assigned prior, default 2
         """
+        assert (
+            self.prior_flag
+        ), "Priors of poses are not set, System may become under-determined. Set them first"
         image_size = self.image_size
         if self._graph is None:
             self._graph = gtsam.NonlinearFactorGraph()
@@ -312,58 +325,3 @@ class BAProblem:
     #  to test it and build the incremental
     def build_incremental_visual_factor_graph(self):
         """"""
-
-
-# def build_factor_graph(fg_data: dict, n: int = 0) -> gtsam.NonlinearFactorGraph:
-#     """
-#     build factor graph from complete data
-#     """
-#     graph_data = fg_data["graph_data"]
-#     depth = fg_data["disps"]
-#     poses = fg_data["poses"]
-#     weights = fg_data["c_map"]
-#     predicted = fg_data["predicted"]
-#     K = fg_data["intrinsics"]
-#     ii = graph_data["ii"]
-#     jj = graph_data["jj"]
-#     pair_unique_id = {}
-#     if n == 0:
-#         n = ii.size()[0]
-#     unique_id = 0
-#     full_graph = gtsam.NonlinearFactorGraph()
-#     print(
-#         f"""Graph index - {graph_data['ii'].size()},
-#               poses - {poses.size()},
-#               ---------------------------
-#               weights - shape = {weights.size()},
-#               ---------------------------
-#               predicted - shape = {predicted.size()},
-#               ---------------------------
-#               depth - shape = {depth.size()},
-#               -------------------------------
-#               intrinics - shape = {K.size()}, {K},
-#         """
-#     )
-#     for index, (ix, jx) in enumerate(zip(ii[:n], jj[:n])):
-#         key = (ix, jx)
-#         if key not in pair_unique_id.keys():
-#             pair_unique_id[key] = unique_id
-#             unique_id += 1
-#         if max(ix, jx).item() > poses.size()[0] - 1:
-#             print(f"Ignoring index - {ix , jx} - out of bounds")
-#             continue
-#         print(f"Index - {index} - Adding factors for {ix} - {jx} edge")
-#         graph = factor_graph_image_pair(
-#             i=ix,
-#             j=jx,
-#             pair_id=unique_id,
-#             pose_i=poses[ix],
-#             pose_j=poses[jx],
-#             depth=depth[ix],
-#             weights=weights[index],
-#             target_pt=predicted[index],
-#             intrinsics=K,
-#         )
-#         full_graph.push_back(graph)
-#     print(f"Number of factors in full factor graph = {full_graph.nrFactors()}")
-#     return full_graph
