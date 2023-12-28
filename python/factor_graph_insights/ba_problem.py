@@ -175,7 +175,7 @@ class BAProblem:
 
     # TODO: separate the prior factor logic completely and add more parameters and conditions to
     #      add prior factors
-    def build_priors(self, priors_definition: Dict) -> gtsam.NonlinearFactorGraph:
+    def add_visual_priors(self, priors_definition: Dict) -> gtsam.NonlinearFactorGraph:
         """prior factor in the graph"""
         # check inputs
         # TODO: Decorate this type checking code.
@@ -193,7 +193,7 @@ class BAProblem:
         ), " 'prior_pose_symbols must be a tuple of ints"
         assert isinstance(
             priors_definition["initial_poses"], np.ndarray
-        ), " 'initial_poses' must be nx7 numpy arrays, each pose being tx, ty, tz, qx, qy, qz, qw"
+        ), " 'initial_poses' must be nx7 numpy arrays, each camera pose in world frame, the order being: tx, ty, tz, qx, qy, qz, qw"
         assert isinstance(
             priors_definition["prior_noise_model"], (list, tuple)
         ), " 'prior_noise_model' must be a list of gtsam.noiseModel for Pose3"

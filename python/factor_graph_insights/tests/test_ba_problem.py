@@ -31,13 +31,13 @@ def pkl_file_path():
 
 
 @pytest.fixture
-def prior_noise_model():
+def prior_noise_models():
     prior_rpy_sigma = 1
     # 3D translational standard deviation of of prior factor - gaussian model
     # (meters)
     prior_xyz_sigma = 0.05
     sigma_angle = np.deg2rad(prior_rpy_sigma)
-    prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
+    prior_noise_model_1 = gtsam.noiseModel.Diagonal.Sigmas(
         np.array(
             [
                 sigma_angle,
@@ -49,7 +49,20 @@ def prior_noise_model():
             ]
         )
     )
-    return prior_noise_model
+    prior_noise_model_2 = gtsam.noiseModel.Diagonal.Sigmas(
+        2
+        * np.array(
+            [
+                sigma_angle,
+                sigma_angle,
+                sigma_angle,
+                prior_xyz_sigma,
+                prior_xyz_sigma,
+                prior_xyz_sigma,
+            ]
+        )
+    )
+    return prior_noise_model_1, prior_noise_model_2
 
 
 @pytest.fixture
@@ -127,7 +140,7 @@ def test_load_data_from_file(pkl_file_path):
     )
 
 
-def test_build_graph_attributes(factor_graph_data, prior_noise_model):
+def test_build_graph_attributes(factor_graph_data):
     ba_problem = BAProblem(factor_graph_data)
     n_e = ba_problem.edges
     n_kf = ba_problem.keyframes
@@ -135,7 +148,6 @@ def test_build_graph_attributes(factor_graph_data, prior_noise_model):
 
     graph = ba_problem.build_visual_factor_graph(N_edges=n_e)
 
-    N_prior = 2
     expected_nrFactors = n_e * image_size[0] * image_size[1]
     assert graph.nrFactors() == expected_nrFactors
     keys = graph.keyVector()
@@ -153,5 +165,40 @@ def test_build_graph_attributes(factor_graph_data, prior_noise_model):
                 ), f"depth {row},{col} for image {i} is absent in graph keys"
 
 
-def test_build_priors():
-    """"""
+def test_add_visual_priors(prior_noise_models, factor_graph_data):
+    """
+    test adding prior factors to factor graph
+    """
+    #
+    prior_definition = {}
+    ba_problem = BAProblem(factor_graph_data)
+
+    with pytest.raises(AssertionError):
+        ba_problem.add_visual_priors(prior_definition)
+
+    prior_definition = {
+        "prior_pose_symbols": (gtsam.symbol("x", 3), gtsam.symbol("x", 4)),
+        "initial_poses": np.array(
+            [[0, 0, 1, 0, 0, 0, 1], [0, 0.2, 1.5, -0.5, 0.0, 0.0, 0.86602]]
+        ),
+        "prior_noise_model": [prior_noise_models[0], prior_noise_models[1]],
+    }
+    ba_problem.add_visual_priors(prior_definition)
+    graph = ba_problem.factor_graph
+    assert graph.nrFactors() == len(prior_definition["prior_pose_symbols"])
+    assert gtsam.symbol("x", 3) in graph.keyVector()
+    assert gtsam.symbol("x", 4) in graph.keyVector()
+    assert graph.at(0).noiseModel().equals(prior_noise_models[0], 1e-5)
+    assert graph.at(1).noiseModel().equals(prior_noise_models[1], 1e-5)
+
+    # prior factors after building factor graph
+    ba_problem = BAProblem(factor_graph_data)
+    n_e = ba_problem.edges
+    n_kf = ba_problem.keyframes
+    image_size = ba_problem.image_size
+
+    ba_problem.add_visual_priors(prior_definition)
+    graph = ba_problem.build_visual_factor_graph(N_edges=n_e)
+    assert graph.nrFactors() == n_e * image_size[0] * image_size[1] + len(
+        prior_definition["prior_pose_symbols"]
+    )
