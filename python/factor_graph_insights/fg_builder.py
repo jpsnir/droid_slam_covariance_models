@@ -131,7 +131,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     @property
     def calibration(self) -> torch.Tensor:
         assert self._K is not None, "Calibration parameters are not set"
-        return torch.tensor(self._K)
+        return self._K
 
     @property
     def camera(self) -> gtsam.Cal3_S2:
@@ -266,7 +266,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         assert getattr(
             error_model, "error"
         ), "No attribute error function in error model"
-        assert (callable(error_model.error), "error attribute is not callable")
+        assert callable(error_model.error), "error attribute is not callable"
         self._error_model = error_model
 
     def set_error_model(self, error_model: object) -> Self:
