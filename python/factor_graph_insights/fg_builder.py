@@ -215,9 +215,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def set_target_pts(self, target_pts: torch.Tensor) -> Self:
         """"""
         assert (
-            target_pts.shape == self._image_size,
-            " Target point tensor does not match image size",
-        )
+            target_pts.shape[1],
+            target_pts.shape[2],
+        ) == self._image_size, " Target point tensor does not match image size"
+
         self._target_pts = target_pts
         return self
 
@@ -235,9 +236,8 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def set_depths(self, depths: torch.Tensor) -> Self:
         """"""
         assert (
-            depths.shape == self._image_size,
-            " Target depth size does not match image size",
-        )
+            depths.shape == self._image_size
+        ), " Target depth size does not match image size"
         self._depths = depths
         return self
 
@@ -248,9 +248,9 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
 
     def set_pixel_weights(self, weights: torch.Tensor) -> Self:
         assert (
-            weights.shape == self._image_size,
-            f" Target weight size does not match image size",
-        )
+            weights.shape[1],
+            weights.shape[2],
+        ) == self._image_size, f" Target weight {weights.shape} size does not match image size{self._image_size}"
         self._weights = weights
         return self
 
@@ -263,10 +263,9 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def error_model(self, error_model: object):
         """assigns the custom factor"""
 
-        assert (
-            getattr(error_model, "error"),
-            "No attribute error function in error model",
-        )
+        assert getattr(
+            error_model, "error"
+        ), "No attribute error function in error model"
         assert (callable(error_model.error), "error attribute is not callable")
         self._error_model = error_model
 
