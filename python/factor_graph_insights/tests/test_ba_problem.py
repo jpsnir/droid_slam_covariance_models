@@ -202,3 +202,7 @@ def test_add_visual_priors(prior_noise_models, factor_graph_data):
     assert graph.nrFactors() == n_e * image_size[0] * image_size[1] + len(
         prior_definition["prior_pose_symbols"]
     )
+
+
+def test_prior_defintions():
+    """"""

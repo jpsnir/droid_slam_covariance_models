@@ -165,7 +165,9 @@ class BAProblem:
         prior_poses: np.ndarray,
         prior_noise_models: List,
     ) -> gtsam.NonlinearFactorGraph:
-        """"""
+        """
+        prior_poses world to camera frame
+        """
 
         for i in range(0, len(symbols)):
             symbol = symbols[i]
@@ -173,8 +175,58 @@ class BAProblem:
             gtsam_pose = DataConverter.to_gtsam_pose(prior_poses[i])
             graph.addPriorPose3(symbol, gtsam_pose, prior_noise_model)
 
-    # TODO: separate the prior factor logic completely and add more parameters and conditions to
-    #      add prior factors
+    def set_prior_noise_model(
+        self, prior_rpy_sigma: float = 1, prior_xyz_sigma: float = 0.05
+    ) -> gtsam.noiseModel:
+        """_summary_
+
+        Args:
+            prior_xyz_sigma (float, optional): 3D rotational standard deviation of prior factor - gaussian model  (degrees)
+            prior_rpy_sigma (float, optional): - 3D translational standard deviation of of prior factor - gaussian model (meters)
+
+        Returns:
+            List[gtsam.noiseModel]: _description_
+        """
+        sigma_angle = np.deg2rad(prior_rpy_sigma)
+        prior_noise_model = gtsam.noiseModel.Diagonal.Sigmas(
+            np.array(
+                [
+                    sigma_angle,
+                    sigma_angle,
+                    sigma_angle,
+                    prior_xyz_sigma,
+                    prior_xyz_sigma,
+                    prior_xyz_sigma,
+                ]
+            )
+        )
+
+        return prior_noise_model
+
+    def set_prior_definition(
+        self,
+        pose_indices: List,
+        prior_noise_models: List = None,
+    ) -> Dict:
+        """creates a dictionary for defining prior poses in the factor graph"""
+        assert (
+            len(pose_indices) >= 2
+        ), " For visual factor graph at least two priors are required"
+
+        # lambda function to create symbols from indices
+        symbols = lambda indices: [gtsam.symbol("x", idx) for idx in indices]
+
+        # set the default prior noise model if not provided
+        if prior_noise_models is None:
+            prior_noise_models = [self.set_prior_noise_model()] * len(pose_indices)
+
+        prior_definition = {
+            "prior_pose_symbols": symbols(pose_indices),
+            "initial_poses": self.poses[pose_indices],
+            "prior_noise_model": prior_noise_models,
+        }
+        return prior_definition
+
     def add_visual_priors(self, priors_definition: Dict) -> gtsam.NonlinearFactorGraph:
         """prior factor in the graph"""
         # check inputs
@@ -193,7 +245,7 @@ class BAProblem:
         ), " 'prior_pose_symbols must be a tuple of ints"
         assert isinstance(
             priors_definition["initial_poses"], np.ndarray
-        ), " 'initial_poses' must be nx7 numpy arrays, each camera pose in world frame, the order being: tx, ty, tz, qx, qy, qz, qw"
+        ), " 'initial_poses' must be nx7 numpy arrays, world to camera frame, the order being: tx, ty, tz, qx, qy, qz, qw"
         assert isinstance(
             priors_definition["prior_noise_model"], (list, tuple)
         ), " 'prior_noise_model' must be a list of gtsam.noiseModel for Pose3"
@@ -213,12 +265,16 @@ class BAProblem:
 
         prior_n_models = priors_definition["prior_noise_model"]
         symbols = priors_definition["prior_pose_symbols"]
-        p_poses = priors_definition["initial_poses"]
+        p_poses_w_c = priors_definition["initial_poses"]
+        p_poses_c_w = np.zeros(p_poses_w_c.shape)
+        for i, pose_w_c in enumerate(p_poses_w_c):
+            p_poses_c_w[i] = DataConverter.invert_pose(pose_w_c)
+
         self._add_pose_priors(
             graph=self._graph,
             symbols=symbols,
             prior_noise_models=prior_n_models,
-            prior_poses=p_poses,
+            prior_poses=p_poses_c_w,
         )
 
     def build_visual_factor_graph(self, N_edges=5) -> gtsam.NonlinearFactorGraph:
