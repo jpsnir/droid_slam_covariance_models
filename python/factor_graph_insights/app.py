@@ -28,19 +28,23 @@ if __name__ == "__main__":
     if fg_dir.exists():
         files_list = sorted(os.listdir(fg_dir))
     print(f"Number of files = {len(files_list)}")
-    fg_file = fg_dir.joinpath(files_list[0])
 
-    fg_data = FactorGraphData.load_from_pickle_file(fg_file)
-
-    ba_problem = BAProblem(fg_data)
-    prior_definition = ba_problem.set_prior_definition(pose_indices=[0, 1])
-    ba_problem.add_visual_priors(prior_definition)
-    graph = ba_problem.build_visual_factor_graph(N_edges=ba_problem.edges)
-    init_vals = ba_problem.i_vals
-    analyzer = GraphAnalysis(graph)
-
-    marginals = analyzer.marginals(init_vals)
-    for i in range(0, len(ba_problem.poses)):
-        cov = marginals.marginalCovariance(gtsam.symbol("x", i))
-        print(f" marginal covariance = {cov}")
+    for i, filename in enumerate(files_list):
+        fg_file = fg_dir.joinpath(filename)
+        fg_data = FactorGraphData.load_from_pickle_file(fg_file)
+        ba_problem = BAProblem(fg_data)
+        oldest_nodes = ba_problem.get_oldest_poses_in_graph()
+        prior_definition = ba_problem.set_prior_definition(pose_indices=oldest_nodes)
+        ba_problem.add_visual_priors(prior_definition)
+        graph = ba_problem.build_visual_factor_graph(N_edges=ba_problem.edges)
+        init_vals = ba_problem.i_vals
+        try:
+            analyzer = GraphAnalysis(graph)
+            marginals = analyzer.marginals(init_vals)
+            print(f"Files worked : {i}")
+            # for i in range(0, len(ba_problem.poses)):
+            #     cov = marginals.marginalCovariance(gtsam.symbol("x", i))
+            #     print(f" marginal covariance = {cov}")
+        except Exception as e:
+            print(f"File number {i}, Filename - {filename}, error code - {e}")
     # print(f" Rank of matrix {np.linalg.matrix_rank(info)}")

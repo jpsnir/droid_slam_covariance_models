@@ -148,6 +148,11 @@ class BAProblem:
     def predicted_pixels(self) -> np.ndarray:
         return self._predicted
 
+    def get_oldest_poses_in_graph(self, n: int = 2) -> List:
+        nodes_i = list(np.sort(self.src_nodes.numpy()))
+        nodes_i_unique = list(set(nodes_i))
+        return nodes_i_unique[:n]
+
     @property
     def factor_graph(self) -> gtsam.NonlinearFactorGraph:
         assert (

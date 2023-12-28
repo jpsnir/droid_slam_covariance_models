@@ -67,7 +67,14 @@ def prior_noise_models():
 
 
 @pytest.fixture
-def factor_graph_data(keyframes, edges, image_size):
+def graph_nodes():
+    ii = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
+    jj = torch.tensor([1, 2, 3, 0, 2, 3, 0, 1, 3, 0, 1, 2])
+    return ii, jj
+
+
+@pytest.fixture
+def factor_graph_data(keyframes, edges, image_size, graph_nodes):
     # define poses for 4 keyframes - 4x7
     n_kf = keyframes
     n_e = edges
@@ -81,8 +88,8 @@ def factor_graph_data(keyframes, edges, image_size):
     predicted = torch.zeros([n_e, 2, ROWS, COLS])
     # define the node i of i -j edge
     # unidirectional
-    ii = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
-    jj = torch.tensor([1, 2, 3, 0, 2, 3, 0, 1, 3, 0, 1, 2])
+    ii = graph_nodes[0]
+    jj = graph_nodes[1]
     K = torch.tensor([50, 50, 50, 50])
     factor_graph_data = {
         "poses": poses,
@@ -195,6 +202,14 @@ def test_prior_defintions(factor_graph_data, prior_noise_models):
         prior_definition["initial_poses"][0],
         DataConverter.invert_pose(ba_problem.poses[0]),
     )
+
+
+def test_oldest_poses_in_graph(factor_graph_data):
+    ba_problem = BAProblem(factor_graph_data)
+    nodes = ba_problem.get_oldest_poses_in_graph()
+    assert len(nodes) == 2
+    assert nodes[0] == 0
+    assert nodes[1] == 1
 
 
 def test_build_graph_attributes(factor_graph_data):
