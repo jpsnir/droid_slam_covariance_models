@@ -191,8 +191,8 @@ class BAProblem:
         """_summary_
 
         Args:
-            prior_xyz_sigma (float, optional): 3D rotational standard deviation of prior factor - gaussian model  (degrees)
-            prior_rpy_sigma (float, optional): - 3D translational standard deviation of of prior factor - gaussian model (meters)
+            prior_xyz_sigma (float, optional): 3D rotational standard deviation of prior factor - gaussian model  (meters)
+            prior_rpy_sigma (float, optional): - 3D translational standard deviation of of prior factor - gaussian model (degrees)
 
         Returns:
             List[gtsam.noiseModel]: _description_
