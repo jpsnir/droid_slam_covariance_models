@@ -303,12 +303,21 @@ class BAProblem:
         image_size = self.image_size
         if self._graph is None:
             self._graph = gtsam.NonlinearFactorGraph()
-
+        
         for edge_id, (node_i, node_j) in enumerate(
             zip(self._ii[:N_edges], self._jj[:N_edges])
         ):
             pose_cam_i_w = self._poses[node_i]
             pose_cam_j_w = self._poses[node_j]
+
+            # handle stereo case
+            if node_i == node_j:
+                pose_ji = torch.tensor([0, 0, -0.11, 0, 0, 0, 1])
+                pose_ji_gtsam = DataConverter.to_gtsam_pose(pose_ji)
+                pose_cam_i_w_gtsam = DataConverter.to_gtsam_pose(pose_w_cam_i)
+                pose_cam_j_w_gtsam = gtsam.Pose3(pose_ji_gtsam.matrix()@pose_cam_i_w_gtsam.matrix())
+                pose_cam_j_w = DataConverter.to_pose_with_quaternion(pose_cam_j_w_gtsam)
+            
             pose_w_cam_i = DataConverter.invert_pose(pose_cam_i_w)
             pose_w_cam_j = DataConverter.invert_pose(pose_cam_j_w)
             fg_builder = (

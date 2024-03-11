@@ -22,7 +22,17 @@ from factor_graph_insights.graph_analysis import GraphAnalysis
 from matplotlib import pyplot as plt
 import signal
 import sys
-logging.basicConfig(level=logging.INFO)
+import time 
+
+log_levels = {
+    'critical': logging.CRITICAL,
+    'error': logging.ERROR,
+    'warn': logging.WARNING,
+    'warning': logging.WARNING,
+    'info': logging.INFO,
+    'debug': logging.DEBUG
+}
+
 def signal_handler(sig, frame):
     print("Pressed Ctrl + C. Exiting")
     sys.exit(0)
@@ -95,8 +105,13 @@ if __name__ == "__main__":
     ap.add_argument("-s","--start_id", type=int, help="index of first factor graph file")
     ap.add_argument("-e","--end_id", type=int, help="index of last factor graph file")
     ap.add_argument("-p","--plot", action="store_true", help="plot graphs")
-    args = ap.parse_args()
+    ap.add_argument("--number_of_edges", type=int, default = -1,help="number of edges to process")
+    ap.add_argument("--depth_threshold", type=float, default = 0.25, help="reject points that are closer than this distance")
+    ap.add_argument("--loglevel", default="info", help="provide loglevel")
 
+    args = ap.parse_args()
+    logging.basicConfig(level=args.loglevel.upper())
+    logging.info(f"logging level = {logging.root.level}")
     fg_dir = Path(args.dir)
     start = args.start_id
     end = args.end_id
@@ -109,15 +124,21 @@ if __name__ == "__main__":
         fg_file = fg_dir.joinpath(filename)
         fg_data = FactorGraphData.load_from_pickle_file(fg_file)
         ba_problem = BAProblem(fg_data)
+        ba_problem.depth_threshold = args.depth_threshold
+
         oldest_nodes = ba_problem.get_oldest_poses_in_graph()
         prior_definition = ba_problem.set_prior_definition(pose_indices=oldest_nodes)
         logging.debug(f"Prior definition : {prior_definition}")
         ba_problem.add_visual_priors(prior_definition)
-        graph = ba_problem.build_visual_factor_graph(N_edges=ba_problem.edges)
+        if args.number_of_edges > 0:
+            graph = ba_problem.build_visual_factor_graph(N_edges=args.number_of_edges)
+        else:
+            graph = ba_problem.build_visual_factor_graph(N_edges=ba_problem.edges)
         init_vals = ba_problem.i_vals
         S_cat = np.zeros([len(ba_problem.poses), 6])
         D_cat = np.zeros([len(ba_problem.poses), 1])
-        node_ids_i, node_ids_j, image_ids = ba_problem.get_node_ids()
+        node_ids_i = ba_problem.get_node_ids(args.number_of_edges)
+        image_ids = ba_problem.get_image_ids()
         logging.info(f"Prior node ids: {oldest_nodes}")
         logging.info(f"node ids - i: size: {len(node_ids_i)} - {node_ids_i}")
         logging.info(f"node timestamps: size : {len(image_ids)} - {image_ids}")
@@ -125,7 +146,7 @@ if __name__ == "__main__":
         try:
             analyzer = GraphAnalysis(graph)
             marginals = analyzer.marginals(init_vals)
-            logging.info(f"Files worked : {file_num}")
+            logging.info(f"Files worked : {start + file_num}")
 
             symbols = lambda indices: [gtsam.symbol("x", idx) for idx in indices]
             
@@ -143,7 +164,7 @@ if __name__ == "__main__":
                 plot_pose_covariance(S_cat, D_cat, image_ids, file_num )        
             files_that_worked.append(int(filename.split("_")[1]))
         except Exception as e:
-            logging.info(f"File number {file_num}, Filename - {filename}, error code - {e}")
+            logging.error(f"File number {file_num}, Filename - {filename}, error code - {e}")
             files_that_failed.append(int(filename.split("_")[1]))
     logging.info(f"files that worked : {files_that_worked}")
     logging.info(f"files that failed : {files_that_failed}")
