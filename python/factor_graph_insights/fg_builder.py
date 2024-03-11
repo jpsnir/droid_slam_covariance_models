@@ -305,16 +305,22 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
 
         # check if the world coordinate point  can be projected in camera j
         pt_2d, safe = self._ph_camera_j.projectSafe(pt3d_w)
-        camera2 = gtsam.PinholeCameraCal3_S2(pose=gtsam.Pose3.Identity(), K=self._K)
-        pt_2d_, safe_ = camera2.projectSafe(pt3d_j)
-        logging.debug(f"Projects pts : {pt_2d}  - {pt_2d_}")
-        if safe:
+        camera2 = gtsam.PinholeCameraCal3_S2(pose=gtsam.Pose3.Identity(), K=self.camera)
+        try:
+            pt_2d_, safe_ = camera2.projectSafe(pt3d_j)
+            if safe != safe_:
+                logging.warn(f"Projects pts : {pt_2d} {safe}  - {pt_2d_} {safe_}")
+            # if safe:
             depth_j = pt3d_j[2]
+            
             is_near_j = depth_j <= near_depth_threshold
-        else:
+        except RuntimeError as e:
             logging.debug(f" Chiral point -> Pixel i: {pixel_i} - bad depth -i : {depth_i}")
             logging.debug(f" Chiral point -> bad point j : {pt3d_j},  safe projection : {safe}, projected : {pt_2d}")
             is_near_j = True
+            
+        if (depth_j < 0 and  is_near_j == False ):
+            logging.warn(f"depth is negative but passing check: {depth_j} - far from near threshold- {not is_near_j}")
             
         return is_near_j
 
@@ -364,6 +370,8 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
                     if not is_close_to_cam_j:
                         s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
                         self._symbols = (s_x_i, s_x_j, s_d_i)
+                        if (inv_depth_i < 0):
+                            logging.warn(f'Inverse depth is negative after all checks: {inv_depth_i}')
                         self._set_init_depth(s_d_i, 1/inv_depth_i)
                         pixel_confidence = (
                             confidence_factor * self._weights[:, row, col].numpy()
@@ -373,11 +381,6 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
                         pixel_to_project = np.array([row, col])
                         predicted_pixel = self._target_pts[:, row, col].numpy()
                         pixels = (pixel_to_project, predicted_pixel)
-                        # vars = (
-                        #     self._gtsam_pose_i,
-                        #     self._gtsam_pose_j,
-                        #     self._depths[row, col],
-                        # )
                         self.error_model.make_custom_factor(
                             self._symbols,
                             pixels,
