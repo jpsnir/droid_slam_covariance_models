@@ -170,6 +170,7 @@ if __name__ == "__main__":
         except Exception as e:
             logging.error(f"File number {file_num}, Filename - {filename}, error code - {e}")
             files_that_failed.append(int(filename.split("_")[1]))
+            time.sleep(2)
     logging.info(f"files that worked : {files_that_worked}")
     logging.info(f"files that failed : {files_that_failed}")
     # print(f" Rank of matrix {np.linalg.matrix_rank(info)}")

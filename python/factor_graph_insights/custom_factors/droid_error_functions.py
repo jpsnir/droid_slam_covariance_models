@@ -30,6 +30,7 @@ class Droid_DBA_Error:
         self._pixel_i = None
         self.backprj_pt_w = np.zeros([3, 1])
         self._error = np.zeros([2, 1])
+        self._depth_i = None
         self._custom_factor = None
 
     @property
@@ -92,17 +93,17 @@ class Droid_DBA_Error:
         H_pt_c2 = np.zeros((2, 3), order="F")
         H_c2 = np.zeros((3, 6), order="F")
         H_c2_c2 = np.zeros((2, 6), order="F")
-
+        # computing error and jacobian
+        camera1 = gtsam.PinholePoseCal3_S2(pose_i, self._K)
+        self.backprj_pt_w = camera1.backproject(
+            self._pixel_i, depth_i, H_c1, H_pi, H_di, H_cal1
+        )
+        assert self.backprj_pt_w.shape == (3,)
+        self.pt_c2 = pose_j.transformTo(self.backprj_pt_w, H_c2, H_pt_w)
+        assert self.pt_c2.shape == (3,)
+        pose_c2_c2 = gtsam.Pose3.Identity()
+        camera2 = gtsam.PinholeCameraCal3_S2(pose=pose_c2_c2, K=self._K)
         try:
-            camera1 = gtsam.PinholePoseCal3_S2(pose_i, self._K)
-            self.backprj_pt_w = camera1.backproject(
-                self._pixel_i, depth_i, H_c1, H_pi, H_di, H_cal1
-            )
-            assert self.backprj_pt_w.shape == (3,)
-            self.pt_c2 = pose_j.transformTo(self.backprj_pt_w, H_c2, H_pt_w)
-            assert self.pt_c2.shape == (3,)
-            pose_c2_c2 = gtsam.Pose3.Identity()
-            camera2 = gtsam.PinholeCameraCal3_S2(pose=pose_c2_c2, K=self._K)
             self.reprojected_pt_j = camera2.project(
                 self.pt_c2, H_c2_c2, H_pt_c2, H_cal2
             )
@@ -114,14 +115,13 @@ class Droid_DBA_Error:
             H_depth_i = H_pt_c2 @ H_pt_w @ H_di
             self.H = [H_pose_i, H_pose_j, H_depth_i]
         except RuntimeError as e:
-            self._error = np.zeros((2, 1))
-            reprojected_pt_j, flag = camera2.projectSafe(
-                self.pt_c2, H_c2_c2, H_pt_c2, H_cal2
-            )
+            
+            reprojected_pt_j, flag = camera2.projectSafe(self.pt_c2)
             logging.error(f"Error model: {e} : point_c2 - {self.pt_c2}, reprojected pt = {reprojected_pt_j}, safe - {flag}")
+            self._error = np.zeros((2, 1))
             self.H = [np.zeros((2, 6), order='F'), 
                       np.zeros((2, 6), order='F'), 
-                      np.zeros((1, 6), order='F')]
+                      np.zeros((2, 1), order='F')]
         return self._error, self.H
 
     @property
@@ -160,7 +160,7 @@ class Droid_DBA_Error:
         self.pixel_to_project = pixels[0]
         self.predicted_pixel = pixels[1]
         # for the given pixels
-        error, H_ = self.error(pose_i, pose_j, depth_i)
+        error, H_ = self.error(pose_i, pose_j, self._depth_i)
         if H is not None:
             H[0] = H_[0]
             H[1] = H_[1]
@@ -172,6 +172,7 @@ class Droid_DBA_Error:
         symbols: T.Tuple[int, int, int],
         pixels,
         pixel_confidence: np.ndarray,
+        depth_i:float= 1
     ) -> gtsam.CustomFactor:
         """
         custom factor for the error function
@@ -184,6 +185,7 @@ class Droid_DBA_Error:
             pixels = (pixels["pixel_i"], pixels["pixel_j"])
         assert len(pixels) == 2, " (pixel to project, predicted pixel) are required"
 
+        self._depth_i = depth_i
         self.pixel_noise_model = gtsam.noiseModel.Diagonal.Information(
             np.diag(pixel_confidence)
         )
