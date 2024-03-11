@@ -7,7 +7,7 @@ import gtsam
 import numpy as np
 import typing as T
 from functools import partial
-
+import logging
 
 class Droid_DBA_Error:
     def __init__(self, k_vec: np.ndarray) -> None:
@@ -115,7 +115,13 @@ class Droid_DBA_Error:
             self.H = [H_pose_i, H_pose_j, H_depth_i]
         except RuntimeError as e:
             self._error = np.zeros((2, 1))
-            print(e)
+            reprojected_pt_j, flag = camera2.projectSafe(
+                self.pt_c2, H_c2_c2, H_pt_c2, H_cal2
+            )
+            logging.error(f"Error model: {e} : point_c2 - {self.pt_c2}, reprojected pt = {reprojected_pt_j}, safe - {flag}")
+            self.H = [np.zeros((2, 6), order='F'), 
+                      np.zeros((2, 6), order='F'), 
+                      np.zeros((1, 6), order='F')]
         return self._error, self.H
 
     @property

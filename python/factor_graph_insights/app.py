@@ -106,7 +106,10 @@ if __name__ == "__main__":
     ap.add_argument("-e","--end_id", type=int, help="index of last factor graph file")
     ap.add_argument("-p","--plot", action="store_true", help="plot graphs")
     ap.add_argument("--number_of_edges", type=int, default = -1,help="number of edges to process")
-    ap.add_argument("--depth_threshold", type=float, default = 0.25, help="reject points that are closer than this distance")
+    ap.add_argument("--near_depth_threshold", type=float, default = 0.25, 
+                    help="reject points that are closer than this distance")
+    ap.add_argument("--far_depth_threshold", type=float, default = 4, 
+                    help="reject points that are farther than this distance")
     ap.add_argument("--loglevel", default="info", help="provide loglevel")
 
     args = ap.parse_args()
@@ -124,7 +127,8 @@ if __name__ == "__main__":
         fg_file = fg_dir.joinpath(filename)
         fg_data = FactorGraphData.load_from_pickle_file(fg_file)
         ba_problem = BAProblem(fg_data)
-        ba_problem.depth_threshold = args.depth_threshold
+        ba_problem.near_depth_threshold = args.near_depth_threshold
+        ba_problem.far_depth_threshold = args.far_depth_threshold
 
         oldest_nodes = ba_problem.get_oldest_poses_in_graph()
         prior_definition = ba_problem.set_prior_definition(pose_indices=oldest_nodes)

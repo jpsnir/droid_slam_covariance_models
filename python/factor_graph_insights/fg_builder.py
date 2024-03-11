@@ -305,8 +305,12 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
             depth_j = pt3d_j[2]
             is_near_j = depth_j < near_depth_threshold
+
+            pt_2d, safe = self._ph_camera_j.projectSafe(pt3d_j)
+            is_near_j = safe and is_near_j
         except RuntimeError as e:
-            logging.error(f"Backproject for depth j: {e} - point {pixel_i} - depth_i: {depth_i}")
+            pt_2d, safe = self._ph_camera_j.projectSafe(pt3d_j)
+            logging.error(f"Backproject for depth j: {e} - {pixel_i} - point in j {pt_2d} - safe : {safe}")
             is_near_j = True
             
         return is_near_j

@@ -17,7 +17,8 @@ from factor_graph_insights.fg_builder import ImagePairFactorGraphBuilder
 from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
 from factor_graph_insights.fg_builder import DataConverter
 
-NEAR_DEPTH_THRESHOLD= 0.25
+NEAR_DEPTH_THRESHOLD = 0.25
+FAR_DEPTH_THRESHOLD = 4
 
 class FactorGraphData:
     @staticmethod
@@ -98,7 +99,7 @@ class BAProblem:
         self._graph = None
         self._prior_added = False
         self._near_depth_threshold = NEAR_DEPTH_THRESHOLD
-
+        self._far_depth_threshold = FAR_DEPTH_THRESHOLD
 
     @property
     def keyframes(self) -> int:
@@ -122,7 +123,15 @@ class BAProblem:
     @near_depth_threshold.setter
     def near_depth_threshold(self, depth_thresh:float) -> None:
         self._near_depth_threshold = depth_thresh
-        
+
+    @property
+    def far_depth_threshold(self)-> None:
+        return self._far_depth_threshold
+    
+    @far_depth_threshold.setter
+    def far_depth_threshold(self, depth_thresh:float) -> None:
+        self._far_depth_threshold = depth_thresh
+
     @property
     def poses(self) -> torch.Tensor:
         return self._poses
@@ -340,7 +349,8 @@ class BAProblem:
                 .set_target_pts(self._predicted[edge_id])
                 .set_error_model(Droid_DBA_Error(self._gtsam_kvec))
             )
-            graph = fg_builder.build_factor_graph(self.i_vals)
+            graph = fg_builder.build_factor_graph(
+                self.i_vals, self._near_depth_threshold, self._far_depth_threshold)
             updated_i_vals = fg_builder.init_values_image_pair
             self._init_values = updated_i_vals
             self._graph.push_back(graph)
