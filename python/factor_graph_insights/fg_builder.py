@@ -25,10 +25,10 @@ from gtsam.symbol_shorthand import L, X
 import factor_graph_insights.custom_factors as droid_autogen
 from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
 import time
+import logging
 
 # confidence map values will go here.
 
-NEAR_DEPTH_THRESHOLD = 0.25
 
 
 class DataConverter:
@@ -288,6 +288,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         depth_i,
         near_depth_threshold: float = 0.25,
     ) -> bool:
+        
         if isinstance(pixel_i, Tuple):
             assert (
                 len(pixel_i) == 2
@@ -298,13 +299,17 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
 
         row, col = pixel_i
         # point in world
-        pt3d_w = self._ph_camera_i.backproject(pixel_i, depth_i)
-        # convert point to camera j coordinate system from world
-        pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
-        depth_j = pt3d_j[2]
-        is_near_j = depth_j < near_depth_threshold
-        is_near_i = depth_i < near_depth_threshold
-        return depth_j, (is_near_i, is_near_j)
+        try:
+            pt3d_w = self._ph_camera_i.backproject(pixel_i, depth_i)
+            # convert point to camera j coordinate system from world
+            pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
+            depth_j = pt3d_j[2]
+            is_near_j = depth_j < near_depth_threshold
+        except RuntimeError as e:
+            logging.error(f"Backproject for depth j: {e} - point {pixel_i} - depth_i: {depth_i}")
+            is_near_j = True
+            
+        return is_near_j
 
     def _set_init_poses(self, symbols: Tuple[int, int]):
         if not self._init_values.exists(symbols[0]):
@@ -318,7 +323,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             self._init_values.insert(symbol, depth)
 
     def build_factor_graph(
-        self, cur_init_vals=gtsam.Values(), confidence_factor=0.001
+        self, cur_init_vals=gtsam.Values(), 
+        near_depth_threshold = 0.25, 
+        far_depth_threshold = 4, 
+        confidence_factor=0.001
     ) -> gtsam.NonlinearFactorGraph:
         """
         overrides base class
@@ -336,34 +344,38 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             for col in range(COLS):
                 # each depth in ith camera has to be assigned a symbol
                 # as it will be optimized as a variable.
-                depth_j, (is_close_to_cam_i, is_close_to_cam_j) = self.depth_to_cam_j(
-                    (row, col), NEAR_DEPTH_THRESHOLD
-                )
+                inv_depth_i = self._depths[row, col]
 
-                if not (is_close_to_cam_i or is_close_to_cam_j):
-                    s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
-                    self._symbols = (s_x_i, s_x_j, s_d_i)
-                    self._set_init_depth(s_d_i, depth_j)
-                    pixel_confidence = (
-                        confidence_factor * self._weights[:, row, col].numpy()
+                if inv_depth_i > 1/far_depth_threshold and inv_depth_i < near_depth_threshold:
+                    is_close_to_cam_j = self.depth_to_cam_j(
+                        (row, col), 1/inv_depth_i, near_depth_threshold
                     )
-                    ## Add factor
-                    assert pixel_confidence.shape == (2,)
-                    pixel_to_project = np.array([row, col])
-                    predicted_pixel = self._target_pts[:, row, col].numpy()
-                    pixels = (pixel_to_project, predicted_pixel)
-                    vars = (
-                        self._gtsam_pose_i,
-                        self._gtsam_pose_j,
-                        self._depths[row, col],
-                    )
-                    self.error_model.make_custom_factor(
-                        self._symbols,
-                        pixels,
-                        pixel_confidence,
-                    )
-                    graph.add(self._error_model.custom_factor)
-                    count_symbol += 1
+
+                    if not is_close_to_cam_j:
+                        s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
+                        self._symbols = (s_x_i, s_x_j, s_d_i)
+                        self._set_init_depth(s_d_i, 1/inv_depth_i)
+                        pixel_confidence = (
+                            confidence_factor * self._weights[:, row, col].numpy()
+                        )
+                        ## Add factor
+                        assert pixel_confidence.shape == (2,)
+                        pixel_to_project = np.array([row, col])
+                        predicted_pixel = self._target_pts[:, row, col].numpy()
+                        pixels = (pixel_to_project, predicted_pixel)
+                        vars = (
+                            self._gtsam_pose_i,
+                            self._gtsam_pose_j,
+                            self._depths[row, col],
+                        )
+                        self.error_model.make_custom_factor(
+                            self._symbols,
+                            pixels,
+                            pixel_confidence,
+                        )
+                        graph.add(self._error_model.custom_factor)
+                        count_symbol += 1
+                logging.info(f"Number of depth variables added in the factor graph: {count_symbol}")
         return graph
 
 

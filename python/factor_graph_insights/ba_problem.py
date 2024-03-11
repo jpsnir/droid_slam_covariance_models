@@ -17,6 +17,7 @@ from factor_graph_insights.fg_builder import ImagePairFactorGraphBuilder
 from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
 from factor_graph_insights.fg_builder import DataConverter
 
+NEAR_DEPTH_THRESHOLD= 0.25
 
 class FactorGraphData:
     @staticmethod
@@ -96,6 +97,8 @@ class BAProblem:
         self._init_values = gtsam.Values()
         self._graph = None
         self._prior_added = False
+        self._near_depth_threshold = NEAR_DEPTH_THRESHOLD
+
 
     @property
     def keyframes(self) -> int:
@@ -111,7 +114,15 @@ class BAProblem:
     def image_size(self) -> Tuple[int, int]:
         n, ROWS, COLS = self._depths.shape
         return (ROWS, COLS)
-
+    
+    @property
+    def near_depth_threshold(self)-> None:
+        return self._near_depth_threshold
+    
+    @near_depth_threshold.setter
+    def near_depth_threshold(self, depth_thresh:float) -> None:
+        self._near_depth_threshold = depth_thresh
+        
     @property
     def poses(self) -> torch.Tensor:
         return self._poses
