@@ -41,7 +41,9 @@ def plot_pose_covariance(
     singular_values: np.array,
     Determinant: np.array = None,
     image_ids: np.array = None,
-    num:int = None,
+    file_num:int = None,
+    save_location:Union[str, Path] = None,
+    pause:bool = False,
 ):
     """plots the covariance of poses for n dimensional pose
        from the singular values of the marginal covariance matrix.
@@ -49,8 +51,14 @@ def plot_pose_covariance(
     Args:
         singular_values (np.array): _description_
     """
-
     
+    # if fig_handles is None:
+    #     fig1, fig2, fig3 = None, None, None
+    # else:
+    #     fig1, fig2, fig3 = fig_handles
+
+    if isinstance(save_location, str):
+        save_location = Path(save_location)
     
     M, N = singular_values.shape
     if image_ids is not None:
@@ -58,6 +66,8 @@ def plot_pose_covariance(
     else:
         x_ = range(0, M)
     labels = ["roll", "pitch", "yaw"]
+
+        
     fig1, ax_theta = plt.subplots(3, 1, figsize=(12, 12))
     for i, ax in enumerate(ax_theta):
         ax.plot(x_, singular_values[:, i], "--*")
@@ -65,26 +75,22 @@ def plot_pose_covariance(
         ax.set_ylabel(f"{labels[i]}", fontsize=18)
         ax.grid(visible=True)
     fig1.suptitle(
-        f"Trends of singular Values of covariance matrix - angles - {num}", fontsize=18
+        f"Trends of singular Values of covariance matrix - angles - {file_num}", fontsize=18
     )
-    plt.show(block=False)
-    plt.pause(0.5)
-    plt.close()
-
-    labels = ["x(m)", "y(m)", "z(m)"]
+    
+    # Singular values
     fig2, ax_position = plt.subplots(3, 1, figsize=(12, 12))
+    labels = ["x(m)", "y(m)", "z(m)"]
     for i, ax in enumerate(ax_position):
         ax.plot(x_, singular_values[:, i + 3], "--*")
         ax.set_xlabel("Pose id ", fontsize=18)
         ax.set_ylabel(f"{labels[i]}", fontsize=18)
         ax.grid(visible=True)
     fig2.suptitle(
-        f"Trends of singular Values of covariance matrix - positions - {num}]", fontsize=18
+        f"Trends of singular Values of covariance matrix - positions - {file_num}]", fontsize=18
     )
-    plt.show(block=False)
-    plt.pause(0.5)
-    plt.close()
-
+    
+    # Determinanant
     if Determinant is not None:
         fig3, ax = plt.subplots(1, 1, figsize=(12, 12))
         ax.plot(x_, Determinant, "--*")
@@ -92,18 +98,39 @@ def plot_pose_covariance(
         ax.set_xlabel("Pose id ", fontsize=18)
         ax.set_ylabel(f"Determinant of Sigma (Log space)", fontsize=18)
         ax.grid(visible=True)
-        fig3.suptitle(f"Trend of determinants of covariance matrix - {num}", fontsize=18)
-    plt.show(block=False)
-    plt.pause(1)
-    plt.close()
-
+        fig3.suptitle(f"Trend of determinants of covariance matrix - {file_num}", fontsize=18)
+    
+    if save_location is not None:
+        # if not save_location.joinpath("position").exists():
+        #     save_location.mkdir("position", parents=True)
+            
+        # if not save_location.joinpath("angle").exists():
+        #     save_location.mkdir("angle", parents=True)
+        # if not save_location.joinpath("determinant").exists():
+        #     save_location.mkdir("determinant", parents=True)
+        
+        fig1.savefig(save_location.joinpath(f"position_{file_num}.png"))
+        fig2.savefig(save_location.joinpath(f"angle_{file_num}.png"))
+        fig3.savefig(save_location.joinpath(f"det_{file_num}.png"))
+        
+        logging.debug("Saving plots")
+    
+    if pause:
+            plt.show(block=True)
+    else: 
+            plt.show(block=False)
+            plt.pause(5)
+            plt.close(fig1)
+            plt.close(fig2)
+            plt.close(fig3)
+    return [fig1, fig2, fig3]
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     ap = argparse.ArgumentParser("Argument parser for factor graph analysis")
     ap.add_argument("-d","--dir", type=Path, help="folderpath with factorgraphs")
-    ap.add_argument("-s","--start_id", type=int, help="index of first factor graph file")
-    ap.add_argument("-e","--end_id", type=int, help="index of last factor graph file")
+    ap.add_argument("-s","--start_id", default = 0, type=int, help="index of first factor graph file")
+    ap.add_argument("-e","--end_id", default = -1, type=int, help="index of last factor graph file")
     ap.add_argument("-p","--plot", action="store_true", help="plot graphs")
     ap.add_argument("--number_of_edges", type=int, default = -1,help="number of edges to process")
     ap.add_argument("--near_depth_threshold", type=float, default = 0.25, 
@@ -111,7 +138,10 @@ if __name__ == "__main__":
     ap.add_argument("--far_depth_threshold", type=float, default = 4, 
                     help="reject points that are farther than this distance")
     ap.add_argument("--loglevel", default="info", help="provide loglevel")
-
+    ap.add_argument("--pause", action="store_true", help="pause the plot to show")
+    ap.add_argument("--save_dir", type=str, default = Path("/data/jagat/processed/plots"),
+                    help="save location for the factor graph")
+    
     args = ap.parse_args()
     logging.basicConfig(level=args.loglevel.upper())
     logging.info(f"logging level = {logging.root.level}")
@@ -123,6 +153,17 @@ if __name__ == "__main__":
     logging.info(f"Number of files = {len(files_list[start:end])}")
     files_that_worked = []
     files_that_failed = []
+    
+    # plot save location 
+    parent_path = fg_dir.parents[3]
+    rel_path = fg_dir.relative_to(parent_path)
+    plot_folder_name = str(rel_path).replace("/","_")
+    plot_save_location = Path(args.save_dir).joinpath(plot_folder_name)
+    if not plot_save_location.exists(): 
+        plot_save_location.mkdir(parents=True)
+    logging.info(f"plots will be saved at : {plot_save_location.absolute()}")
+    
+    # analyzing all factor graph files within the start and  end range.
     for file_num, filename in enumerate(files_list[start:end]):
         fg_file = fg_dir.joinpath(filename)
         fg_data = FactorGraphData.load_from_pickle_file(fg_file)
@@ -153,9 +194,10 @@ if __name__ == "__main__":
             logging.info(f"Files worked : {start + file_num}")
 
             symbols = lambda indices: [gtsam.symbol("x", idx) for idx in indices]
-            
+            cov_list = []
             for p_id in node_ids_i:
                 cov = marginals.marginalCovariance(gtsam.symbol("x", p_id))
+                cov_list.append(cov)
                 U, S, V = np.linalg.svd(cov)
                 S_cat[p_id, :] = S
                 d = np.linalg.det(cov)
@@ -164,8 +206,10 @@ if __name__ == "__main__":
                 logging.debug(f" singular values at {p_id} = {S}")
                 logging.debug(f" determinant at {p_id} = {d}")
                 logging.debug(f"Concatenated singular values = {S_cat}")
+                logging.debug(f"Concatenated covariance list : {cov_list}")
             if args.plot:
-                plot_pose_covariance(S_cat, D_cat, image_ids, file_num )        
+                plot_pose_covariance(S_cat, D_cat, image_ids, file_num, plot_save_location, args.pause )
+                
             files_that_worked.append(int(filename.split("_")[1]))
         except Exception as e:
             logging.error(f"File number {file_num}, Filename - {filename}, error code - {e}")
@@ -173,4 +217,5 @@ if __name__ == "__main__":
             time.sleep(2)
     logging.info(f"files that worked : {files_that_worked}")
     logging.info(f"files that failed : {files_that_failed}")
+    
     # print(f" Rank of matrix {np.linalg.matrix_rank(info)}")

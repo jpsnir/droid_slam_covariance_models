@@ -116,7 +116,7 @@ class Droid_DBA_Error:
             self.H = [H_pose_i, H_pose_j, H_depth_i]
         except RuntimeError as e:
             reprojected_pt_j, flag = camera2.projectSafe(self.pt_c2)
-            logging.error(f"Error model: {e} : point_c2 - {self.pt_c2}, reprojected pt = {reprojected_pt_j}, safe - {flag}")
+            logging.debug(f"Error model: {e} : point_c2 - {self.pt_c2}, reprojected pt = {reprojected_pt_j}, safe - {flag}")
             self._error = np.zeros((2, 1))
             self.H = [np.zeros((2, 6), order='F'), 
                       np.zeros((2, 6), order='F'), 
