@@ -109,8 +109,8 @@ def plot_pose_covariance(
         # if not save_location.joinpath("determinant").exists():
         #     save_location.mkdir("determinant", parents=True)
         
-        fig1.savefig(save_location.joinpath(f"position_{file_num}.png"))
-        fig2.savefig(save_location.joinpath(f"angle_{file_num}.png"))
+        fig1.savefig(save_location.joinpath(f"angle_{file_num}.png"))
+        fig2.savefig(save_location.joinpath(f"position_{file_num}.png"))
         fig3.savefig(save_location.joinpath(f"det_{file_num}.png"))
         
         logging.debug("Saving plots")
