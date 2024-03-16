@@ -100,30 +100,27 @@ def plot_pose_covariance(
         ax.grid(visible=True)
         fig3.suptitle(f"Trend of determinants of covariance matrix - {file_num}", fontsize=18)
     
-    if save_location is not None:
-        # if not save_location.joinpath("position").exists():
-        #     save_location.mkdir("position", parents=True)
-            
-        # if not save_location.joinpath("angle").exists():
-        #     save_location.mkdir("angle", parents=True)
-        # if not save_location.joinpath("determinant").exists():
-        #     save_location.mkdir("determinant", parents=True)
-        
+    if save_location is not None:      
         fig1.savefig(save_location.joinpath(f"angle_{file_num}.png"))
         fig2.savefig(save_location.joinpath(f"position_{file_num}.png"))
         fig3.savefig(save_location.joinpath(f"det_{file_num}.png"))
-        
-        logging.debug("Saving plots")
+        logging.info("Saving plots")
     
     if pause:
             plt.show(block=True)
     else: 
-            plt.show(block=False)
-            plt.pause(5)
             plt.close(fig1)
             plt.close(fig2)
             plt.close(fig3)
     return [fig1, fig2, fig3]
+
+def visualize_images(image_id_list: List):
+    """"""
+    
+
+def plot_error_from_groundtruth(image_id_list: List, covariance: List ):
+    """"""
+    
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
@@ -143,25 +140,26 @@ if __name__ == "__main__":
                     help="save location for the factor graph")
     
     args = ap.parse_args()
-    logging.basicConfig(level=args.loglevel.upper())
-    logging.info(f"logging level = {logging.root.level}")
     fg_dir = Path(args.dir)
-    start = args.start_id
-    end = args.end_id
-    if fg_dir.exists():
-        files_list = sorted(os.listdir(fg_dir))
-    logging.info(f"Number of files = {len(files_list[start:end])}")
-    files_that_worked = []
-    files_that_failed = []
-    
-    # plot save location 
     parent_path = fg_dir.parents[3]
     rel_path = fg_dir.relative_to(parent_path)
+    # plot save location 
     plot_folder_name = str(rel_path).replace("/","_")
     plot_save_location = Path(args.save_dir).joinpath(plot_folder_name)
     if not plot_save_location.exists(): 
         plot_save_location.mkdir(parents=True)
+    logging.basicConfig(filename=str(plot_save_location.joinpath("app.log")), level=args.loglevel.upper())
+    logging.info(f"logging level = {logging.root.level}")
     logging.info(f"plots will be saved at : {plot_save_location.absolute()}")
+    
+    start = args.start_id
+    end = args.end_id
+    if fg_dir.exists():
+        files_list = sorted(os.listdir(fg_dir))
+    logging.info(f"Number of files to processed in {fg_dir} = {len(files_list[start:end])}")
+    files_that_worked = []
+    files_that_failed = []
+    
     
     # analyzing all factor graph files within the start and  end range.
     for file_num, filename in enumerate(files_list[start:end]):
@@ -217,5 +215,7 @@ if __name__ == "__main__":
             time.sleep(2)
     logging.info(f"files that worked : {files_that_worked}")
     logging.info(f"files that failed : {files_that_failed}")
+    
+    
     
     # print(f" Rank of matrix {np.linalg.matrix_rank(info)}")
