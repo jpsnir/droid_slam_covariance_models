@@ -2,7 +2,7 @@ import numpy as np
 import gtsam
 import sys
 import time
-
+import logging 
 """
 1. Increase age of graph and get the factor graph data to see if the marginals can be computed for longer distances.
 2. Increase the frontend threshold in demo.py to get factor graph data to see if the 
@@ -35,7 +35,7 @@ class GraphAnalysis:
         b_list = []
         cov_list = []
         info_list = []
-        print(f"Errors init values = {self._graph.error(i_vals)}")
+        logging.info(f"Errors init values = {self._graph.error(i_vals)}")
         # lin_graph1 = self._graph.linearize(i_vals)
         # jac, b = lin_graph1.jacobian()
         # info_0 = jac.transpose() @ jac
