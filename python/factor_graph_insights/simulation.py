@@ -22,7 +22,7 @@ sigma_error = 0.1 # 1m
 lin_vel = 1 #m/s
 ang_vel = 0.2 #rad/s
 
-def pose_graph_simulation(true_poses: List[np.array], measurements: List[Dict]) -> List:
+def pose_graph_simulation(true_poses: List[np.array], measurements: List[Dict], ax:plt.Axes = None) -> List:
     """Main runner."""
     # Create noise models
     PRIOR_NOISE = gtsam.noiseModel.Diagonal.Sigmas(gtsam.Point3(0.03, 0.03, 0.01))
@@ -256,16 +256,16 @@ if __name__ == "__main__":
     title = []
     determinant = {}
     
-    for adj_matrix, title in zip(adj_matrix_list, title_list):
+    fig1, ax1 = plt.subplots(1, 2, figsize=(12, 12))
+    for i, (adj_matrix, title) in enumerate(zip(adj_matrix_list, title_list)):
         true_poses, measurements, weights = poses_and_measurements_from_covisibility_graph(adj_matrix=adj_matrix)
-        breakpoint()
         visualize_adjacency_matrix(adjacency_matrix=adj_matrix, weights=weights, title=title)
-        determinant[title] = pose_graph_simulation(true_poses, measurements)
-    fig, ax = plt.subplots(1)
+        determinant[title] = pose_graph_simulation(true_poses, measurements, ax=ax1[i])
+    fig2, ax2 = plt.subplots(1)
     print(determinant)
-    ax.plot(determinant[title_list[0]],'*-r')
-    ax.plot(determinant[title_list[1]],'.-g')
-    ax.set_yscale("log")
-    ax.legend(title_list)
-    ax.grid(visible=True)
+    ax2.plot(determinant[title_list[0]],'*--r')
+    ax2.plot(determinant[title_list[1]],'.--g')
+    ax2.set_yscale("log")
+    ax2.legend(title_list)
+    ax2.grid(visible=True)
     plt.show()
