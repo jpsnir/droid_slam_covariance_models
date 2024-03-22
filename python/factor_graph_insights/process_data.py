@@ -19,6 +19,7 @@ import time
 
 class FactorGraphFileProcessor:
     """
+    process a single factor graph file and analyze the covariance
     """
     def __init__(self, args):
         """
@@ -40,6 +41,24 @@ class FactorGraphFileProcessor:
             "determinants": self.D_cat,
             "cov_singular_values": self.S_cat,
         }
+    
+    def covisibility_graph_to_adj_matrix(src_nodes, dst_nodes):
+        """
+        builds an adjaceny matrix from the list of edges.
+        returns an upper triangular matrix
+        """
+        
+        node_ids = list(set(np.sort(src_nodes.numpy())))
+        N = len(node_ids)
+        M = np.zeros((N, N))
+        for src, dst in zip(src_nodes, dst_nodes):
+            for i, n in enumerate(node_ids):
+                if(src.item()==n):
+                    row = i
+                if(dst.item()==n):
+                    col = i
+            M[row, col] = 1
+        return np.triu(M), node_ids
     
     def process(self, fg_file: Path) -> bool:
         """
