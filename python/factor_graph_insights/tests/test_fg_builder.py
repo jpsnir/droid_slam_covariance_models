@@ -53,7 +53,7 @@ def input_data():
 @pytest.fixture
 def fg_builder(input_data):
     fg_builder = ImagePairFactorGraphBuilder(0, 1, (1, 3))
-    fg_builder.set_calibration(input_data["intrinsics"]).set_depths(
+    fg_builder.set_calibration(input_data["intrinsics"]).set_inverse_depths(
         input_data["depths"]
     ).set_pixel_weights(input_data["weights"]).set_target_pts(
         input_data["target_pt"]

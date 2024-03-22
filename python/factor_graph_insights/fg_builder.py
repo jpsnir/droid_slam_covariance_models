@@ -25,10 +25,10 @@ from gtsam.symbol_shorthand import L, X
 import factor_graph_insights.custom_factors as droid_autogen
 from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
 import time
+import logging
 
 # confidence map values will go here.
 
-NEAR_DEPTH_THRESHOLD = 0.25
 
 
 class DataConverter:
@@ -233,7 +233,7 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         row, col = pixel
         return float(self._depths[row, col])
 
-    def set_depths(self, depths: torch.Tensor) -> Self:
+    def set_inverse_depths(self, depths: torch.Tensor) -> Self:
         """"""
         assert (
             depths.shape == self._image_size
@@ -285,9 +285,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
     def depth_to_cam_j(
         self,
         pixel_i: Union[Tuple[int, int], np.ndarray],
-        depth_i,
+        inv_depth_i,
         near_depth_threshold: float = 0.25,
     ) -> bool:
+        depth_i =1/inv_depth_i
         if isinstance(pixel_i, Tuple):
             assert (
                 len(pixel_i) == 2
@@ -301,10 +302,27 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         pt3d_w = self._ph_camera_i.backproject(pixel_i, depth_i)
         # convert point to camera j coordinate system from world
         pt3d_j = self._gtsam_pose_j.transformTo(pt3d_w)
-        depth_j = pt3d_j[2]
-        is_near_j = depth_j < near_depth_threshold
-        is_near_i = depth_i < near_depth_threshold
-        return depth_j, (is_near_i, is_near_j)
+
+        # check if the world coordinate point  can be projected in camera j
+        pt_2d, safe = self._ph_camera_j.projectSafe(pt3d_w)
+        camera2 = gtsam.PinholeCameraCal3_S2(pose=gtsam.Pose3.Identity(), K=self.camera)
+        try:
+            pt_2d_, safe_ = camera2.projectSafe(pt3d_j)
+            if safe != safe_:
+                logging.warn(f"Projects pts : {pt_2d} {safe}  - {pt_2d_} {safe_}")
+            # if safe:
+            depth_j = pt3d_j[2]
+            
+            is_near_j = depth_j <= near_depth_threshold
+        except RuntimeError as e:
+            logging.debug(f" Chiral point -> Pixel i: {pixel_i} - bad depth -i : {depth_i}")
+            logging.debug(f" Chiral point -> bad point j : {pt3d_j},  safe projection : {safe}, projected : {pt_2d}")
+            is_near_j = True
+            
+        if (depth_j < 0 and  is_near_j == False ):
+            logging.warn(f"depth is negative but passing check: {depth_j} - far from near threshold- {not is_near_j}")
+            
+        return is_near_j
 
     def _set_init_poses(self, symbols: Tuple[int, int]):
         if not self._init_values.exists(symbols[0]):
@@ -318,7 +336,10 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
             self._init_values.insert(symbol, depth)
 
     def build_factor_graph(
-        self, cur_init_vals=gtsam.Values(), confidence_factor=0.001
+        self, cur_init_vals=gtsam.Values(), 
+        near_depth_threshold = 0.25, 
+        far_depth_threshold = 4, 
+        confidence_factor=0.1
     ) -> gtsam.NonlinearFactorGraph:
         """
         overrides base class
@@ -332,38 +353,47 @@ class ImagePairFactorGraphBuilder(FactorGraphBuilder):
         s_x_j = gtsam.symbol("x", self.j)
         self._set_init_poses((s_x_i, s_x_j))
         count_symbol = 0
+        bad_points = 0
+        good_points = 0
         for row in range(ROWS):
             for col in range(COLS):
                 # each depth in ith camera has to be assigned a symbol
                 # as it will be optimized as a variable.
-                depth_j, (is_close_to_cam_i, is_close_to_cam_j) = self.depth_to_cam_j(
-                    (row, col), NEAR_DEPTH_THRESHOLD
-                )
+                inv_depth_i = self._depths[row, col]
 
-                if not (is_close_to_cam_i or is_close_to_cam_j):
-                    s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
-                    self._symbols = (s_x_i, s_x_j, s_d_i)
-                    self._set_init_depth(s_d_i, depth_j)
-                    pixel_confidence = (
-                        confidence_factor * self._weights[:, row, col].numpy()
+                if inv_depth_i > 1/far_depth_threshold and inv_depth_i < 1/near_depth_threshold:
+                    #logging.debug(f" Inverse Depth {inv_depth_i} in camera i is within far: {1/far_depth_threshold}, near: {1/near_depth_threshold}" )
+                    is_close_to_cam_j = self.depth_to_cam_j(
+                        (row, col), inv_depth_i, near_depth_threshold
                     )
-                    ## Add factor
-                    assert pixel_confidence.shape == (2,)
-                    pixel_to_project = np.array([row, col])
-                    predicted_pixel = self._target_pts[:, row, col].numpy()
-                    pixels = (pixel_to_project, predicted_pixel)
-                    vars = (
-                        self._gtsam_pose_i,
-                        self._gtsam_pose_j,
-                        self._depths[row, col],
-                    )
-                    self.error_model.make_custom_factor(
-                        self._symbols,
-                        pixels,
-                        pixel_confidence,
-                    )
-                    graph.add(self._error_model.custom_factor)
-                    count_symbol += 1
+
+                    if not is_close_to_cam_j:
+                        s_d_i = gtsam.symbol("d", ROWS * COLS * self.i + count_symbol)
+                        self._symbols = (s_x_i, s_x_j, s_d_i)
+                        if (inv_depth_i < 0):
+                            logging.warn(f'Inverse depth is negative after all checks: {inv_depth_i}')
+                        self._set_init_depth(s_d_i, 1/inv_depth_i)
+                        pixel_confidence = (
+                            confidence_factor * self._weights[:, row, col].numpy()
+                        )
+                        ## Add factor
+                        assert pixel_confidence.shape == (2,)
+                        pixel_to_project = np.array([row, col])
+                        predicted_pixel = self._target_pts[:, row, col].numpy()
+                        pixels = (pixel_to_project, predicted_pixel)
+                        self.error_model.make_custom_factor(
+                            self._symbols,
+                            pixels,
+                            pixel_confidence,
+                            1/inv_depth_i
+                        )
+                        graph.add(self._error_model.custom_factor)
+                        count_symbol += 1
+                        good_points += 1
+                    else:
+                        bad_points += 1
+        if (bad_points > good_points):
+            logging.warn(f"Depth: Good points: {good_points}, Bad points : {bad_points}")
         return graph
 
 

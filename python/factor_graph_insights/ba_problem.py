@@ -16,7 +16,10 @@ import numpy as np
 from factor_graph_insights.fg_builder import ImagePairFactorGraphBuilder
 from factor_graph_insights.custom_factors.droid_error_functions import Droid_DBA_Error
 from factor_graph_insights.fg_builder import DataConverter
+import logging
 
+NEAR_DEPTH_THRESHOLD = 0.25
+FAR_DEPTH_THRESHOLD = 4
 
 class FactorGraphData:
     @staticmethod
@@ -96,6 +99,9 @@ class BAProblem:
         self._init_values = gtsam.Values()
         self._graph = None
         self._prior_added = False
+        self._near_depth_threshold = NEAR_DEPTH_THRESHOLD
+        self._far_depth_threshold = FAR_DEPTH_THRESHOLD
+        self._image_ids = factor_graph_data['tstamp']
 
     @property
     def keyframes(self) -> int:
@@ -111,6 +117,22 @@ class BAProblem:
     def image_size(self) -> Tuple[int, int]:
         n, ROWS, COLS = self._depths.shape
         return (ROWS, COLS)
+    
+    @property
+    def near_depth_threshold(self)-> None:
+        return self._near_depth_threshold
+    
+    @near_depth_threshold.setter
+    def near_depth_threshold(self, depth_thresh:float) -> None:
+        self._near_depth_threshold = depth_thresh
+
+    @property
+    def far_depth_threshold(self)-> None:
+        return self._far_depth_threshold
+    
+    @far_depth_threshold.setter
+    def far_depth_threshold(self, depth_thresh:float) -> None:
+        self._far_depth_threshold = depth_thresh
 
     @property
     def poses(self) -> torch.Tensor:
@@ -147,10 +169,21 @@ class BAProblem:
     @property
     def predicted_pixels(self) -> np.ndarray:
         return self._predicted
+    
 
-    def get_oldest_poses_in_graph(self, n: int = 2) -> List:
-        nodes_i = list(np.sort(self.src_nodes.numpy()))
+    def get_image_ids(self):
+        return self._image_ids
+    
+    def get_node_ids(self, n_e: int):
+        nodes_i = list(np.sort(self.src_nodes[:n_e].numpy()))
         nodes_i_unique = list(set(nodes_i))
+        return nodes_i_unique
+    
+    def get_oldest_poses_in_graph(self, n: int = 2) -> List:
+        nodes_i_unique = list(
+            set(
+                np.sort(self.src_nodes.numpy())
+        ))
         return nodes_i_unique[:n]
 
     @property
@@ -191,8 +224,8 @@ class BAProblem:
         """_summary_
 
         Args:
-            prior_xyz_sigma (float, optional): 3D rotational standard deviation of prior factor - gaussian model  (degrees)
-            prior_rpy_sigma (float, optional): - 3D translational standard deviation of of prior factor - gaussian model (meters)
+            prior_xyz_sigma (float, optional): 3D rotational standard deviation of prior factor - gaussian model  (meters)
+            prior_rpy_sigma (float, optional): - 3D translational standard deviation of of prior factor - gaussian model (degrees)
 
         Returns:
             List[gtsam.noiseModel]: _description_
@@ -303,24 +336,38 @@ class BAProblem:
         image_size = self.image_size
         if self._graph is None:
             self._graph = gtsam.NonlinearFactorGraph()
-
+        
         for edge_id, (node_i, node_j) in enumerate(
             zip(self._ii[:N_edges], self._jj[:N_edges])
         ):
             pose_cam_i_w = self._poses[node_i]
             pose_cam_j_w = self._poses[node_j]
+
+            # handle stereo case
+            if node_i == node_j:
+                pose_ji = torch.tensor([0, 0, -0.11, 0, 0, 0, 1])
+                pose_ji_gtsam = DataConverter.to_gtsam_pose(pose_ji)
+                pose_cam_i_w_gtsam = DataConverter.to_gtsam_pose(pose_cam_i_w)
+                pose_cam_j_w_gtsam = gtsam.Pose3(pose_ji_gtsam.matrix()@pose_cam_i_w_gtsam.matrix())
+                pose_cam_j_w = DataConverter.to_pose_with_quaternion(pose_cam_j_w_gtsam)
+                logging.debug(f"world in left : {pose_cam_i_w}")
+                logging.debug(f"world in right : {pose_cam_j_w}")
+            
             pose_w_cam_i = DataConverter.invert_pose(pose_cam_i_w)
             pose_w_cam_j = DataConverter.invert_pose(pose_cam_j_w)
             fg_builder = (
                 ImagePairFactorGraphBuilder(node_i, node_j, image_size)
                 .set_calibration(self.calibration_gtsam)
-                .set_depths(self._depths[node_i])
+                .set_inverse_depths(self._depths[node_i])
                 .set_poses_and_cameras(pose_w_cam_i, pose_w_cam_j)
                 .set_pixel_weights(self._c_map[edge_id])
                 .set_target_pts(self._predicted[edge_id])
                 .set_error_model(Droid_DBA_Error(self._gtsam_kvec))
             )
-            graph = fg_builder.build_factor_graph(self.i_vals)
+            logging.debug(f"Depth thresholds: far:{self._far_depth_threshold}")
+            logging.debug(f"Depth thresholds: near:{self._near_depth_threshold}")
+            graph = fg_builder.build_factor_graph(
+                self.i_vals, self._near_depth_threshold, self._far_depth_threshold)
             updated_i_vals = fg_builder.init_values_image_pair
             self._init_values = updated_i_vals
             self._graph.push_back(graph)
