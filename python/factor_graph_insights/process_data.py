@@ -16,6 +16,7 @@ from factor_graph_insights.ba_problem import BAProblem, FactorGraphData
 from factor_graph_insights.graph_analysis import GraphAnalysis
 import sys
 import time
+import csv
 from typing import Tuple, Dict, List
 
 
@@ -30,10 +31,9 @@ class FactorGraphFileProcessor:
         """
         
         # save locations
-        self.save_dir = args.save_dir
         self.raw_image_folder = args.raw_image_folder
-        if args.filepath is not None:
-            self.factor_graph_file = Path(args.filepath)
+        self.save_dir = args.save_dir
+        self.factor_graph_file = Path(args.filepath)
         
         # ba problem parameters
         self.near_depth_threshold = args.near_depth_threshold
@@ -43,19 +43,22 @@ class FactorGraphFileProcessor:
         # processed parameters
         self.D_cat = None
         self.S_cat = None
-        self.metadata = {}
+        
         
         # plot 
         self.metadata["plot"] = args.plot
-        if not self.metadata["plot_save_location"].exists():
-            self.metadata["plot_save_location"].mkdir(parents=True)
+        
         # raw_image_folder=Path(f"{self.raw_image_folder}/{self.metadata['dataset_name']}/mav0/cam0/data/")
         # gt_data = Path(f"/data/jagat/processed/evo/{metadata['dataset_name']}/{metadata['cam_type']}/lba/")
         
+        if self.save_dir is not None:
+            if not self.metadata["plot_save_location"].exists():
+                self.metadata["plot_save_location"].mkdir(parents=True)
+            
         # logging configuration
         if args.log_to_file:
             logging.basicConfig(
-                filename=str(self.metadata["plot_save_location"].joinpath("app_2.log")),
+                filename=str(self.metadata["plot_save_location"].joinpath("application.log")),
                 level=args.loglevel.upper(),
             )
         else:
@@ -64,13 +67,11 @@ class FactorGraphFileProcessor:
         logging.info(f"Near depth : {args.near_depth_threshold}")
         logging.info(f"Far depth : {args.far_depth_threshold}")
         logging.info(f"logging level = {logging.root.level}")
-        logging.info(
-            f"plots will be saved at : {self.metadata['plot_save_location'].absolute()}"
-        )
-
-    @property
-    def metadata(self):
-        return self.metadata
+        if self.save_dir is not None:
+            logging.info(
+                    f"plots will be saved at : {self.metadata['plot_save_location'].absolute()}"
+            )
+        
     
     @property
     def factor_graph_file(self) -> Path:
@@ -82,6 +83,7 @@ class FactorGraphFileProcessor:
     @factor_graph_file.setter
     def factor_graph_file(self, file_path: Path) -> None:
         self.fg_file = file_path
+        self.metadata = {}
         self.metadata["cam_type"] = self.fg_file.parents[2].stem
         self.metadata["dataset_name"] = self.fg_file.parents[3].stem
         self.metadata["parent_folder"] = self.fg_file.parents[4]
@@ -89,13 +91,17 @@ class FactorGraphFileProcessor:
         self.metadata["file_id"] = self.metadata["filename"].split("_")[1]
         rel_path = self.fg_file.relative_to(self.metadata["parent_folder"])
         folder_name = str(rel_path).replace("/", "_").split(".")[0]
-        self.metadata["plot_save_location"] = Path(self.save_dir).joinpath(folder_name)
+        if self.save_dir is not None:
+            self.metadata["plot_save_location"] = Path(self.save_dir).joinpath(folder_name)
+        else:
+            self.metadata["plot_save_location"] = None
+            
     
     
     @property
     def graph(self):
-        if self.graph is not None:
-            return self.graph
+        if self._graph is not None:
+            return self._graph
         else:
             raise Exception("Graph is not constructed")
 
@@ -123,7 +129,13 @@ class FactorGraphFileProcessor:
                     col = i
             M[row, col] = 1
         return np.triu(M)
-
+    
+    def image_and_node_ids(self):
+        fg_data = FactorGraphData.load_from_pickle_file(self.fg_file)
+        self.ba_problem = BAProblem(fg_data)
+        self.metadata["node_ids"] = self.ba_problem.get_node_ids(self.number_of_edges)
+        self.metadata["image_ids"] = self.ba_problem.get_image_ids()
+    
     def initialize_ba_problem(self) -> Tuple:
         """
         builds a factor graph from the factor graph data.
@@ -146,11 +158,11 @@ class FactorGraphFileProcessor:
         # build a factor graph.
         self.ba_problem.add_visual_priors(prior_definition)
         if self.number_of_edges > 0:
-            self.graph = self.ba_problem.build_visual_factor_graph(
+            self._graph = self.ba_problem.build_visual_factor_graph(
                 N_edges=self.number_of_edges
             )
         else:
-            self.graph = self.ba_problem.build_visual_factor_graph(
+            self._graph = self.ba_problem.build_visual_factor_graph(
                 N_edges=self.ba_problem.edges
             )
 
@@ -167,7 +179,7 @@ class FactorGraphFileProcessor:
 
         return self.ba_problem, self.metadata
 
-    def process(self, visualizer: None) -> bool:
+    def process(self) -> bool:
         """
         computes covariance of the ba problem at init_vals
         and then compute its covariance
@@ -179,28 +191,48 @@ class FactorGraphFileProcessor:
         self.S_cat = np.zeros([len(self.metadata["node_ids"]), 6])
         self.D_cat = np.zeros([len(self.metadata["node_ids"]), 1])
         try:
-            analyzer = GraphAnalysis(self.graph)
+            analyzer = GraphAnalysis(self._graph)
             marginals = analyzer.marginals(self.ba_problem.i_vals)
             symbols = lambda indices: [gtsam.symbol("x", idx) for idx in indices]
             cov_list = []
-            for p_id in self.metadata["node_ids"]:
+            for i, p_id in enumerate(self.metadata["node_ids"]):
                 cov = marginals.marginalCovariance(gtsam.symbol("x", p_id))
                 cov_list.append(cov)
                 U, S, V = np.linalg.svd(cov)
-                self.S_cat[p_id, :] = S
+                self.S_cat[i, :] = S
                 d = np.linalg.det(cov)
-                self.D_cat[p_id, :] = d
+                self.D_cat[i, :] = d
                 self._log_values(cov_list, p_id, cov, S, d)
             flag = True
         except Exception as e:
             logging.error(f"Filename - {self.metadata['filename']}, error code - {e}")
             time.sleep(2)
         return flag
+    
+    
+    def extract_kf_images(self):
+        """
+        """
+        image_files = []
+        image_ids = self.metadata['image_ids']
+        node_ids = self.metadata['node_ids']
+        kf_ids = image_ids[node_ids]
+        dataset_name = self.metadata['dataset_name']
+        image_folder = self.raw_image_folder.joinpath(f"{dataset_name}/mav0/cam0/data/")
+        index_timestamp_logfile = self.metadata['parent_folder'].joinpath(
+            f"{self.metadata['dataset_name']}.csv")
+        with open(index_timestamp_logfile, 'r') as f:
+            reader = csv.reader(f, delimiter=',')
+            for row in reader:
+                if int(row[0]) in kf_ids:
+                    image_files.append(image_folder.joinpath(f"{row[1]}.png"))
+        
+        return image_files
 
+        
     def _log_values(self, cov_list, p_id, cov, S, d):
         logging.debug(f" marginal covariance = {cov}")
         logging.debug(f" singular values at {p_id} = {S}")
         logging.debug(f" determinant at {p_id} = {d}")
         logging.debug(f"Concatenated singular values = {self.S_cat}")
         logging.debug(f"Concatenated covariance list : {cov_list}")
-

@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 import os
 import numpy as np
-from factor_graph_insights.visualization_utils import CovTrendsVisualizer
+from factor_graph_insights.visualization_utils import BaseVisualizer, CovTrendsVisualizer
 from factor_graph_insights.process_data import FactorGraphFileProcessor
 
 
@@ -34,8 +34,7 @@ def common_command_line_arguments(ap: argparse.ArgumentParser) -> argparse.Argum
                     help="save logs in a log file")
     ap.add_argument("--save_dir", type=str, default=Path("/data/jagat/processed/fg_images"),
                     help="save location of images in a factor graph")
-    ap.add_argument("--raw_image_folder", type=str, default=Path("/data/euroc/"),
-                    help="save location of images in a factor graph")
+    
     return ap
 
 
@@ -51,6 +50,7 @@ def handle_file():
     # ap.add_argument("--stride", type=int, default=2, help="images to skip when computing ids")
 
     args = ap.parse_args()
+    args.raw_image_folder = None
     fg_file_processor = FactorGraphFileProcessor(args)
     fg_file_processor.initialize_ba_problem()
     success = fg_file_processor.process()
@@ -64,9 +64,40 @@ def handle_file():
     visualizer.plot_trends_determinants(fg_file_processor.D_cat, adj_matrix)
     visualizer.plot_trends_singular_values(fg_file_processor.S_cat)
 
+def images_in_factor_graph():
+    signal.signal(signal.SIGINT, signal_handler)
+    ap = argparse.ArgumentParser(
+        "Argument parser for factor graph file analysis")
+    ap.add_argument("--raw_image_folder", type=Path, default=Path("/data/euroc/"),
+                    help="save location of images in a factor graph")
+    ap.add_argument("-f", "--filepath", required=True, type=Path,
+                    help="filepath of the factor graph file")
+    args = ap.parse_args()
+    args.plot = True
+    args.number_of_edges = -1
+    args.near_depth_threshold = 0.25
+    args.far_depth_threshold = 2
+    args.save_dir = None
+    args.loglevel = "info"
+    args.log_to_file = False
+    
+    fg_file_processor = FactorGraphFileProcessor(args)
+    fg_file_processor.image_and_node_ids()
+    visualizer = BaseVisualizer(fg_file_processor.metadata)
+    image_file_paths = fg_file_processor.extract_kf_images()
+    visualizer.visualize_images(image_file_paths)
+    
 
 def animate():
     """"""
+    signal.signal(signal.SIGINT, signal_handler)
+    ap = argparse.ArgumentParser(
+        "Argument parser for factor graph file analysis")
+    ap = common_command_line_arguments(ap)
+    ap.add_argument("-f", "--filepath", required=True, type=Path,
+                    help="filepath of the factor graph file")
+    ap.add_argument("--raw_image_folder", type=Path, default=Path("/data/euroc/"),
+                    help="save location of images in a factor graph")
 
 
 def list_of_ints(arg: str) -> List[int]:

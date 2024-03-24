@@ -14,7 +14,9 @@ setup(
         'console_scripts':[
           'fg_file_processor=factor_graph_insights.main_cli:handle_file',
           'fg_covariance_animator=factor_graph_insights.main_cli:animate',
-          'fg_batch_processor=factor_graph_insights.main_cli:handle_batch',  
+          'fg_batch_processor=factor_graph_insights.main_cli:handle_batch',
+          'fg_image_viewer=factor_graph_insights.main_cli:images_in_factor_graph',
+          'run_simulation=factor_graph_insights.simulation:main',
         ],
     }
     
