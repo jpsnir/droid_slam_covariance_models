@@ -29,7 +29,8 @@ n_circle = 2*np.pi/ang_vel
 def animate(adj_matrix_pair:np.array):
     # Create a graph
     G = nx.Graph()
-    M, N = adj_matrix.shape
+    adj_matrix1, adj_matrix2 = adj_matrix_pair
+    M, N = adj_matrix1.shape
     fig = plt.figure(constrained_layout=True, figsize=(15, 15))
     spec = gridspec.GridSpec(nrows=2, ncols=4, figure=fig)
     ax1 = []
@@ -165,9 +166,12 @@ def pose_graph_simulation(true_poses: List[np.array], measurements: List[Dict], 
         D_list.append(D)
     
     ax.grid(visible=True)
+    ax.set_xlabel("x(m)")
+    ax.set_ylabel("y(m)")
+    ax.annotate('Ellipses show covariances', xy=(1, 0), xycoords='axes fraction', fontsize=14,
+                horizontalalignment='right', verticalalignment='bottom')
     # ax.set_xlim((-20, 20))
     # ax.set_ylim((-20, 20))
-    print(D_list)
     
     return D_list
 
@@ -352,7 +356,7 @@ def main():
     determinant = {}
     
     #fig1, ax1 = plt.subplots(2, 4, figsize=(15, 15))
-    fig = plt.figure(constrained_layout=True, figsize=(15, 15))
+    fig = plt.figure(constrained_layout=True, figsize=(30, 15))
     spec = gridspec.GridSpec(nrows=2, ncols=4, figure=fig)
      
     ax3 = fig.add_subplot(spec[:, 3])
@@ -364,6 +368,7 @@ def main():
         true_poses, measurements, weights = poses_and_measurements_from_covisibility_graph(adj_matrix=adj_matrix)
         visualize_adjacency_matrix(adjacency_matrix=adj_matrix, weights=weights, title=title, axis=ax1[:2])
         determinant[title] = pose_graph_simulation(true_poses, measurements, ax=ax1[2])
+        ax1[1].set_title(f"Adjacency matrix - {title}")
     
     # fig, ax = plt.subplots()
     # for pose in true_poses:
@@ -388,6 +393,8 @@ def main():
         ax3.set_yscale("log")
         ax3.legend(title_list)
         ax3.grid(visible=True)
+        ax3.set_title(" Simulation to show trends in determinant of \nCovariance comparison")
+    fig.savefig("./simulation.png")
     plt.show()
     
 if __name__ == "__main__":

@@ -115,7 +115,8 @@ def animate():
     }
     animator = CovarianceResultsAnimator()
     animator.set_data(animation_data)
-    animator.run()
+    animator.run(show=False)
+    
 
 
 def list_of_ints(arg: str) -> List[int]:

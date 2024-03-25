@@ -7,6 +7,7 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.gridspec as gridspec
 from typing import Union, Dict, List
 from pathlib import Path
+import subprocess
 
 class BaseAnimator:
     """
@@ -17,7 +18,7 @@ class BaseAnimator:
     def __init__(self):
         """ 
         """
-        self.fig = plt.figure(constrained_layout=True, figsize=(15, 15))
+        self.fig = plt.figure(constrained_layout=True, figsize=(40, 15))
         
     def set_data(self):
         """
@@ -35,16 +36,21 @@ class BaseAnimator:
         """
         raise NotImplementedError
     
-    def run(self):
+    def run(self, show=True):
         """
         animate function
         """
         self.ani = FuncAnimation(self.fig, self.update, frames=self.generator, interval=1000, repeat=False)
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            self.save()
         
-    def save():
+    def save(self):
         """ 
         """
+        self.ani.save(f"./animation" + ".mp4", writer="ffmpeg", fps=1)
+        
 
 
 class CovarianceResultsAnimator(BaseAnimator):
@@ -59,41 +65,24 @@ class CovarianceResultsAnimator(BaseAnimator):
         self.ax_img.set_title("Keyframe image")
         self.ax_cov = self.fig.add_subplot(spec[0, 1])
         self.ax_cov.set_yscale("log")
-        self.ax_cov.set_xlabel("Pose id", fontsize=12)
+        self.ax_cov.set_xlabel("Pose id", fontsize=18)
         self.ax_cov.set_ylabel(
             f"Determinant of \nrelative marginal covariances of poses \n(Log space)",
-            fontsize=12)
+            fontsize=18)
         self.ax_cov.grid(visible=True, which="both", linestyle=":")
+        
         self.ax_traj = self.fig.add_subplot(spec[0, 2], projection="3d")
+        self.ax_traj.view_init(elev=80, azim=80, roll = 0)
+        self.ax_traj.set_xlabel("x", fontsize=18)
+        self.ax_traj.set_ylabel("y", fontsize=18)
+        self.ax_traj.set_zlabel("z", fontsize=18)
+        self.ax_traj.set_xlim([0, 2])
+        self.ax_traj.set_ylim([-1.5, 1.5])
+        self.ax_traj.set_zlim([0, 2])
+        self.ax_traj.set_box_aspect([2,1,1])
+
         self.ax_mat = self.fig.add_subplot(spec[1, 1])
-        
-        # ax[0].plot(self.x_, Determinant, "--*")
-        #     ax[0].annotate(
-        #         str(i),
-        #         (xi, yi),
-        #         textcoords="offset points",
-        #         xytext=(0, 10),
-        #         ha="center",
-        #         fontsize=10,
-        #         rotation=45,
-        #     )
-      
-        # breakpoint()
-        # ax[0].set_xticks(self.x_)
-        # ax[0].xaxis.set_ticks(self.x_)
-        # ax[0].tick_params(axis="both",
-        #                   which="major",
-        #                   labelsize=8,
-        #                   labelrotation=60)
-        
-        # ax[0].minorticks_on()
-        # ax[0].grid(visible=True, which="both", linestyle=":")
-        # ax[0].set_title(
-        #     f"{self.dataset_name} - {len(self.node_ids)} keyframes\
-        #     - {int(self.image_ids[-1].item()/20)}s",
-        #     fontsize=18,
-        # )
-        
+        self.ax_mat.set_title("Adjacency graph of the shown V2_03 dataset images")     
         
         # variables
         self.animation_data = None
@@ -107,6 +96,8 @@ class CovarianceResultsAnimator(BaseAnimator):
         """
         """
         self.animation_data = animation_data
+        self.ax_cov.set_xlim([0, max(self.animation_data["kf_ids"]+ 20)])
+        self.ax_cov.set_ylim([1e-21, 1e-16])
         
     def update(self, id):
         """
@@ -116,18 +107,12 @@ class CovarianceResultsAnimator(BaseAnimator):
         self.ax_cov.plot(self.image_id, self.curr_cov_det, "--*")
         self.ax_cov.annotate(
             str(id), (self.image_id, self.curr_cov_det), textcoords="offset points",
-            xytext=(0, 10), ha="center", fontsize=10, rotation=45,
+            xytext=(0, 10), ha="center", fontsize=18, rotation=45,
         )
         self.ax_mat.spy(self.adj_matrix)
         self.ax_traj.plot(self.curr_pose[0], self.curr_pose[1], self.curr_pose[2], "-*")
-        self.ax_traj.text(
-                self.curr_pose[0],
-                self.curr_pose[1],
-                self.curr_pose[2],
-                f"{id}",
-                color="black",
-                va="bottom",
-        )
+        self.ax_img.set_title(f"Keyframe {id}",fontsize=18)
+        self.ax_traj.set_title(f"Keyframe pose - {id}",fontsize=18)
         pose_w_c = DataConverter.to_gtsam_pose(self.curr_pose).inverse()
         T = pose_w_c.matrix()
         self._plot_coordinate_frame(
@@ -136,14 +121,7 @@ class CovarianceResultsAnimator(BaseAnimator):
                 origin=[self.curr_pose[0],
                 self.curr_pose[1],
                 self.curr_pose[2],],
-                size=0.05)
-
-        self.ax_traj.text(self.curr_pose[0],
-                self.curr_pose[1],
-                self.curr_pose[2],
-                "S",
-                color="red",
-                va="bottom")
+                size=0.15)
         
     def generator(self):
         """
