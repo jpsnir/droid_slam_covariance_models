@@ -72,7 +72,7 @@ class CovarianceResultsAnimator(BaseAnimator):
         self.ax_cov.grid(visible=True, which="both", linestyle=":")
         
         self.ax_traj = self.fig.add_subplot(spec[0, 2], projection="3d")
-        self.ax_traj.view_init(elev=80, azim=80, roll = 0)
+        self.ax_traj.view_init(elev=75, azim=85, roll = 10)
         self.ax_traj.set_xlabel("x", fontsize=18)
         self.ax_traj.set_ylabel("y", fontsize=18)
         self.ax_traj.set_zlabel("z", fontsize=18)
