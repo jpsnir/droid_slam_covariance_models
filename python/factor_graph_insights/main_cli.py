@@ -12,7 +12,7 @@ import os
 import numpy as np
 from factor_graph_insights.visualization_utils import BaseVisualizer, CovTrendsVisualizer
 from factor_graph_insights.process_data import FactorGraphFileProcessor
-
+from factor_graph_insights.animations import CovarianceResultsAnimator
 
 def signal_handler(sig, frame):
     print("Pressed Ctrl + C. Exiting")
@@ -84,7 +84,7 @@ def images_in_factor_graph():
     fg_file_processor = FactorGraphFileProcessor(args)
     fg_file_processor.image_and_node_ids()
     visualizer = BaseVisualizer(fg_file_processor.metadata)
-    image_file_paths = fg_file_processor.extract_kf_images()
+    image_file_paths, node_ids, kf_ids = fg_file_processor.extract_kf_images()
     visualizer.visualize_images(image_file_paths)
     
 
@@ -98,6 +98,24 @@ def animate():
                     help="filepath of the factor graph file")
     ap.add_argument("--raw_image_folder", type=Path, default=Path("/data/euroc/"),
                     help="save location of images in a factor graph")
+    args = ap.parse_args()
+    args.plot = False
+    
+    fg_file_processor = FactorGraphFileProcessor(args)
+    fg_file_processor.initialize_ba_problem()
+    success = fg_file_processor.process()
+    adj_matrix = fg_file_processor.covisibility_graph_to_adj_matrix()
+    image_file_paths, node_ids, kf_ids = fg_file_processor.extract_kf_images()
+    animation_data = {
+        "image_paths" : image_file_paths,
+        "adj_matrix": adj_matrix,
+        "cov_determinants": fg_file_processor.D_cat,
+        "trajectory" : fg_file_processor.ba_problem.poses[[node_ids]],
+        "kf_ids" : kf_ids,
+    }
+    animator = CovarianceResultsAnimator()
+    animator.set_data(animation_data)
+    animator.run()
 
 
 def list_of_ints(arg: str) -> List[int]:

@@ -2,6 +2,7 @@ import logging
 from matplotlib import pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.gridspec as gridspec
 from typing import Union, Dict, List
 from pathlib import Path
 import cv2 as cv
@@ -245,41 +246,3 @@ class CovTrendsVisualizer(BaseVisualizer):
         if self.show_plot:
             plt.show()
 
-
-class BaseAnimator:
-    """
-    provides the basic functionality of animation using
-    matplotlib to update plots and graphs, given  the data.
-    """
-
-    def __init__(self, args):
-        """ 
-        """
-        
-
-    def generator():
-        """ 
-        """
-        
-    def animate():
-        """
-        """
-        
-    def save():
-        """ """
-
-
-class CovarianceResultsAnimator(BaseAnimator):
-
-    def __init__(self, args):
-        """ """
-        # 1. canvas
-        # 2. image data,
-        # 3. single factor graph
-        # 4.
-
-    def animate():
-        """ """
-
-    def save():
-        """ """

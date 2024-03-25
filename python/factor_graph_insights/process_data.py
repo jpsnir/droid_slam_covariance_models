@@ -227,7 +227,7 @@ class FactorGraphFileProcessor:
                 if int(row[0]) in kf_ids:
                     image_files.append(image_folder.joinpath(f"{row[1]}.png"))
         
-        return image_files
+        return image_files, node_ids, kf_ids
 
         
     def _log_values(self, cov_list, p_id, cov, S, d):

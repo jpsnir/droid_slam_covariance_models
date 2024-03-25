@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='factor_graph_insights',
-    version='1.0',
+    version='1.1',
     description="Analysis factor graphs from droid slam for covariance calculation",
     author="Jagatpreet Singh Nir",
     author_email="nir.j@northeastern.edu",
