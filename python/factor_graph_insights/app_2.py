@@ -25,7 +25,8 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import signal
 import sys
-import time 
+import time
+import pandas as pd
 
 log_levels = {
     'critical': logging.CRITICAL,
@@ -219,15 +220,15 @@ if __name__ == "__main__":
     args = ap.parse_args()
     fg_file = Path(args.filepath)
     metadata = {}
-    metadata['cam_type'] = fg_file.parents[2].stem
-    metadata['dataset_name'] = fg_file.parents[3].stem
-    metadata['parent_folder'] = fg_file.parents[4]
+    metadata['cam_type'] = 'mono' #fg_file.parents[2].stem
+    metadata['dataset_name'] = 'euroc' #fg_file.parents[3].stem
+    metadata['parent_folder'] = './tests' #fg_file.parents[4]
     metadata['filename'] = fg_file.stem
     metadata['file_id'] =metadata['filename'].split("_")[1]
-    rel_path = fg_file.relative_to(metadata['parent_folder'])
+    #rel_path = fg_file.relative_to(metadata['parent_folder'])
     # plot save location 
-    folder_name = str(rel_path).replace("/","_").split(".")[0]
-    metadata['plot_save_location'] = Path(args.save_dir).joinpath(folder_name)
+    #folder_name = str(rel_path).replace("/","_").split(".")[0]
+    metadata['plot_save_location'] = Path(args.save_dir) #.joinpath(folder_name)
     metadata['plot'] = args.plot
     raw_image_folder=Path(f"/data/jagat/euroc/{metadata['dataset_name']}/mav0/cam0/data/")
     gt_data = Path(f"/data/jagat/processed/evo/{metadata['dataset_name']}/{metadata['cam_type']}/lba/")
@@ -247,7 +248,7 @@ if __name__ == "__main__":
     logging.info(f"plots will be saved at : {metadata['plot_save_location'].absolute()}")
      
     # analyzing all factor graph files within the start and  end range.
-    fg_data = FactorGraphData.load_from_pickle_file(fg_file)
+    fg_data = FactorGraphData.load_from_pickle_file(fg_file.resolve())
     logging.info("Building bundle Adjustment problem")
     ba_problem = BAProblem(fg_data)
     
@@ -299,6 +300,10 @@ if __name__ == "__main__":
             logging.debug(f"Concatenated covariance list : {cov_list}")
         logging.info("Marginal covariances computation finished")
         plot_pose_covariance(S_cat, D_cat, adjacency_matrix_data, metadata)
+        # Create pandas dataframe where first column is determinant, next 33 columns are adjacency matrix
+        df_array = pd.DataFrame(np.hstack((D_cat, adjacency_matrix)))
+        df_array.to_pickle(f'./tests/data/output/boxplot_input_{os.path.splitext(os.path.basename(fg_file))[0]}.pkl')
+
             
     except Exception as e:
         logging.error(f"File number {metadata['file_id']}, Filename - {metadata['filename']}, error code - {e}")
